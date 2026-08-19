@@ -1,0 +1,10 @@
+model Order {
+  id        NVARCHAR(1000) @id @default(uuid()) @description("Primary key for the Order table (auto-generated UUID)")
+  userId    NVARCHAR(1000) @description("Foreign key linking to the User model who placed the order")
+  total     INT            @default(0) @description("Total cost amount of the order")
+  status    NVARCHAR(50)?  @description("Order status: open, paid, shipped, cancelled")
+  createdAt DATETIME2      @default(now()) @description("The date and time when the order was created")
+  user      User           @relation(fields: [userId], references: [id]) @description("The user who placed this order")
+
+  @@description("Represents a customer order in the system.")
+}
