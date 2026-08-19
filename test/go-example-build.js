@@ -27,7 +27,7 @@ try {
   for (const f of fs.readdirSync(generatedDir).filter((n) => n.endsWith('.go'))) {
     fs.copyFileSync(path.join(generatedDir, f), path.join(clientDir, f));
   }
-  fs.writeFileSync(path.join(tmp, 'go.mod'), 'module an5example-go\n\ngo 1.25\n');
+  fs.writeFileSync(path.join(tmp, 'go.mod'), 'module an5example-go\n\ngo 1.22\n');
   fs.writeFileSync(
     path.join(tmp, 'main.go'),
     [

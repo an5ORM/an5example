@@ -1,6 +1,6 @@
 module an5example/golang
 
-go 1.25
+go 1.22
 
 require (
 	an5client v0.0.0
