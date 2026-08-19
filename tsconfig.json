@@ -4,7 +4,10 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "ignoreDeprecations": "6.0",
-    "lib": ["ES2021", "DOM"],
+    "lib": [
+      "ES2021", 
+      "DOM"
+    ],
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
