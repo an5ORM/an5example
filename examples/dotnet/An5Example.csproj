@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>An5Example</AssemblyName>
+    <RootNamespace>An5Example</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Generated an5client sources (shared with the schema/generated folder). -->
+    <Compile Include="../../generated/dotnet/An5Config.cs" />
+    <Compile Include="../../generated/dotnet/An5DbContext.cs" />
+    <Compile Include="../../generated/dotnet/An5OrmTypes.cs" />
+    <Compile Include="../../generated/dotnet/User.cs" />
+    <Compile Include="../../generated/dotnet/Order.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SQL Server provider used by the generated client. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+</Project>
