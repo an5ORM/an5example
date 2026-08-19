@@ -14,8 +14,8 @@ Run:
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "generated", "python"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "an5Adapters", "python"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "generated", "python"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "an5Adapters", "python"))
 
 import an5_client  # noqa: E402
 import an5_metadata  # noqa: E402
