@@ -17,7 +17,7 @@
     "test:example:dotnet": "dotnet run --project examples/dotnet",
     "test:go": "node test/go-example-build.js",
     "test:dotnet": "node test/dotnet-compile-check.js",
-    "test:python": "python -m compileall -q examples/python && python examples/python/crud.py"
+    "test:python": "(python -m compileall -q examples/python || python3 -m compileall -q examples/python) && (python examples/python/crud.py || python3 examples/python/crud.py)"
   },
   "devDependencies": {
     "@an5/adapters": "file:../an5Adapters",
