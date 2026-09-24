@@ -7,7 +7,8 @@
  */
 import { createAn5Adapter, setAdapterMetadata } from '@an5/adapters';
 import { modelToTable, modelFields, relationMap } from '../../generated/typescript/an5Metadata';
-import type { An5 } from '../../generated/typescript';
+import type { UserTableClient } from '../../generated/typescript/User';
+import type { OrderTableClient } from '../../generated/typescript/Order';
 
 function ts(offsetDays = 0): string {
   const d = new Date(Date.now() + offsetDays * 86400000);
@@ -21,17 +22,16 @@ for (const [model, table] of Object.entries(modelToTable)) {
 }
 setAdapterMetadata({ modelToTable: sqliteTables, modelFields, relationMap });
 
-interface ExampleDb {
-  user: any;
-  orders: any;
-  order: any;
-  $executeRawUnsafe(query: string, ...values: any[]): Promise<number>;
-  $executeRaw(query: string, ...values: any[]): Promise<number>;
+// Typed model delegates (standard ORM access): `db.user` / `db.order` resolve
+// through the adapter proxy with full autocomplete and argument checking.
+interface ExampleModels {
+  user: UserTableClient;
+  users: UserTableClient;
+  order: OrderTableClient;
+  orders: OrderTableClient;
 }
 
-const db = createAn5Adapter({ connectionString: 'sqlite://:memory:' }) as unknown as ExampleDb & {
-  $connect(): Promise<void>;
-};
+const db = createAn5Adapter<ExampleModels>({ connectionString: 'sqlite://:memory:' });
 
 async function createTables(): Promise<void> {
   await db.$executeRaw(

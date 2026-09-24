@@ -13,8 +13,8 @@ export namespace An5 {
   export type NumberNullableFilter = { equals?: number | null; in?: (number | null)[]; notIn?: (number | null)[]; lt?: number; lte?: number; gt?: number; gte?: number; not?: number | NumberNullableFilter | null; };
   export type BooleanFilter = { equals?: boolean; not?: boolean | BooleanFilter; };
   export type BooleanNullableFilter = { equals?: boolean | null; not?: boolean | BooleanNullableFilter | null; };
-  export type DateTimeFilter = { equals?: Date; in?: Date[]; notIn?: Date[]; lt?: Date; lte?: Date; gt?: Date; gte?: Date; not?: Date | DateTimeFilter; };
-  export type DateTimeNullableFilter = { equals?: Date | null; in?: (Date | null)[]; notIn?: (Date | null)[]; lt?: Date; lte?: Date; gt?: Date; gte?: Date; not?: Date | DateTimeNullableFilter | null; };
+  export type DateTimeFilter = { equals?: Date | string; in?: (Date | string)[]; notIn?: (Date | string)[]; lt?: Date | string; lte?: Date | string; gt?: Date | string; gte?: Date | string; not?: Date | string | DateTimeFilter; };
+  export type DateTimeNullableFilter = { equals?: Date | string | null; in?: ((Date | string) | null)[]; notIn?: ((Date | string) | null)[]; lt?: Date | string; lte?: Date | string; gt?: Date | string; gte?: Date | string; not?: Date | string | DateTimeNullableFilter | null; };
 }
 
 export interface TableClient<T, WhereInput = any, Select = any, Include = any, CreateInput = any, UpdateInput = any, FindManyArgs = any, FindFirstArgs = any, FindUniqueArgs = any, CreateArgs = any, UpdateArgs = any, UpsertArgs = any, DeleteArgs = any, AggregateArgs = any, GroupByArgs = any> {
