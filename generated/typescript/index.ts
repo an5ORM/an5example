@@ -62,14 +62,14 @@ export class An5Client {
   $disconnect(): Promise<void> { return Promise.resolve(); }
   $transaction<R>(fn: (tx: An5Client) => Promise<R>, options?: { timeout?: number }): Promise<R>;
   $transaction<R>(list: Promise<R>[]): Promise<R[]>;
-  $transaction(fn: any, options?: any): Promise<any> { return typeof fn === 'function' ? fn(this) : Promise.all(fn); }
+  $transaction(fn: any, _options?: any): Promise<any> { return typeof fn === 'function' ? fn(this) : Promise.all(fn); }
   $begin(): Promise<An5Client> { return Promise.resolve(this); }
   $commit(): Promise<void> { return Promise.resolve(); }
   $rollback(): Promise<void> { return Promise.resolve(); }
-  $queryRaw<T = any>(queryParts: TemplateStringsArray | string, ...values: any[]): Promise<T> { return Promise.resolve([] as any); }
-  $queryRawUnsafe<R = any>(query: string, ...values: any[]): Promise<R> { return Promise.resolve([] as any); }
-  $executeRaw<T = any>(queryParts: TemplateStringsArray | string, ...values: any[]): Promise<any> { return Promise.resolve(0 as any); }
-  $executeRawUnsafe(query: string, ...values: any[]): Promise<number> { return Promise.resolve(0); }
+  $queryRaw<T = any>(_queryParts: TemplateStringsArray | string, ..._values: any[]): Promise<T> { return Promise.resolve([] as any); }
+  $queryRawUnsafe<R = any>(_query: string, ..._values: any[]): Promise<R> { return Promise.resolve([] as any); }
+  $executeRaw<_T = any>(_queryParts: TemplateStringsArray | string, ..._values: any[]): Promise<any> { return Promise.resolve(0 as any); }
+  $executeRawUnsafe(_query: string, ..._values: any[]): Promise<number> { return Promise.resolve(0); }
   Order!: OrderTypes.OrderTableClient;
   order!: OrderTypes.OrderTableClient;
   Orders!: OrderTypes.OrderTableClient;

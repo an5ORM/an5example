@@ -17,7 +17,7 @@ export namespace An5 {
   export type DateTimeNullableFilter = { equals?: Date | string | null; in?: ((Date | string) | null)[]; notIn?: ((Date | string) | null)[]; lt?: Date | string; lte?: Date | string; gt?: Date | string; gte?: Date | string; not?: Date | string | DateTimeNullableFilter | null; };
 }
 
-export interface TableClient<T, WhereInput = any, Select = any, Include = any, CreateInput = any, UpdateInput = any, FindManyArgs = any, FindFirstArgs = any, FindUniqueArgs = any, CreateArgs = any, UpdateArgs = any, UpsertArgs = any, DeleteArgs = any, AggregateArgs = any, GroupByArgs = any> {
+export interface TableClient<T, WhereInput = any, _Select = any, Include = any, CreateInput = any, UpdateInput = any, FindManyArgs = any, FindFirstArgs = any, FindUniqueArgs = any, CreateArgs = any, UpdateArgs = any, UpsertArgs = any, DeleteArgs = any, AggregateArgs = any, GroupByArgs = any> {
   findMany(args?: FindManyArgs): Promise<T[]>;
   vectorSearch(args: { vector: number[]; take?: number; where?: WhereInput; include?: Include; vectorField?: string; distanceMetric?: 'cosine' | 'euclidean' | 'dot'; }): Promise<(T & { distance: number })[]>;
   findFirst(args?: FindFirstArgs): Promise<T | null>;

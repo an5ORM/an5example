@@ -71,7 +71,10 @@ async function main(): Promise<void> {
   const found = await db.user.findMany({ where: { email: { contains: 'alice' } }, include: { orders: true, _count: true } });
   console.log(`users matching 'alice': ${found.length}`);
 
-  const order = await db.order.findFirst({ where: { id: (await db.orders.findMany({ take: 1 }))[0].id }, include: { user: true } });
+  const firstOrders = await db.orders.findMany({ take: 1 });
+  const firstOrder = firstOrders[0];
+  if (firstOrder === undefined) throw new Error('expected at least one order');
+  const order = await db.order.findFirst({ where: { id: firstOrder.id }, include: { user: true } });
   console.log(`order ${order?.id} belongs to ${order?.user?.email}`);
 
   const stats = await db.order.aggregate({ _sum: { total: true }, _count: true });
