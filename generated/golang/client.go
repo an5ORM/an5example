@@ -208,6 +208,9 @@ func (c *TableClient[T]) queryAndScan(ctx context.Context, query string, args ..
 		}
 		results = append(results, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return results, nil
 }
 
