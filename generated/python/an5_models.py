@@ -1,6 +1,6 @@
 # This file is auto-generated. Do not edit directly.
 from dataclasses import dataclass, field
-from typing import Optional, List, Any
+from typing import Optional, List, Any, TypedDict
 from datetime import datetime
 
 """Represents a customer order in the system."""
@@ -13,6 +13,15 @@ class Order:
     created_at: Optional[datetime] = None
     user: Optional[Any] = None
 
+class OrderRow(TypedDict, total=False):
+    """Row shape returned for Order queries."""
+    id: str
+    user_id: str
+    total: int
+    status: str
+    created_at: datetime
+    user: Any
+
 """Represents a registered user in the database."""
 @dataclass
 class User:
@@ -23,4 +32,14 @@ class User:
     score: Optional[int] = None
     created_at: Optional[datetime] = None
     orders: List[Any] = field(default_factory=list)
+
+class UserRow(TypedDict, total=False):
+    """Row shape returned for User queries."""
+    id: str
+    email: str
+    name: str
+    is_active: bool
+    score: int
+    created_at: datetime
+    orders: List[Any]
 
