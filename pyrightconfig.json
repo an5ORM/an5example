@@ -1,0 +1,4 @@
+{
+  "extraPaths": ["generated/python", "../an5Adapters/python"],
+  "typeCheckingMode": "standard"
+}
