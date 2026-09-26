@@ -2,10 +2,7 @@
 import os
 from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 
-try:
-    from an5_adapter import An5Adapter, AdapterTableClient, create_an5_adapter, set_adapter_metadata
-except ImportError:
-    from .an5_adapter import An5Adapter, AdapterTableClient, create_an5_adapter, set_adapter_metadata
+from an5_adapter import An5Adapter, AdapterTableClient, create_an5_adapter, set_adapter_metadata
 
 try:
     from .an5_metadata import MODEL_TO_TABLE, MODEL_FIELDS
@@ -14,9 +11,13 @@ except ImportError:
 
 if TYPE_CHECKING:
     try:
-        from an5_models import OrderRow, UserRow
+        from .Order import OrderRow
     except ImportError:
-        from .an5_models import OrderRow, UserRow
+        from .an5_models import OrderRow  # fallback aggregator
+    try:
+        from .User import UserRow
+    except ImportError:
+        from .an5_models import UserRow  # fallback aggregator
 
 class An5Client:
     """AN5 Python ORM Client - type-safe database access.

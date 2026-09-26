@@ -22,6 +22,9 @@ module.exports = {
     golang: {
       outputDir: 'generated/golang',
     },
+    rust: {
+      outputDir: 'generated/rust',
+    },
   },
 
   generation: {
