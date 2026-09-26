@@ -13,10 +13,13 @@ class Order:
     created_at: Optional[datetime] = None
     user: Optional[Any] = None
 
-class OrderRow(TypedDict, total=False):
+class _OrderRequired(TypedDict):
+    """Required keys of a Order row."""
+    user_id: str
+
+class OrderRow(_OrderRequired, total=False):
     """Row shape returned for Order queries."""
     id: str
-    user_id: str
     total: int
     status: str
     created_at: datetime
@@ -33,10 +36,13 @@ class User:
     created_at: Optional[datetime] = None
     orders: List[Any] = field(default_factory=list)
 
-class UserRow(TypedDict, total=False):
+class _UserRequired(TypedDict):
+    """Required keys of a User row."""
+    email: str
+
+class UserRow(_UserRequired, total=False):
     """Row shape returned for User queries."""
     id: str
-    email: str
     name: str
     is_active: bool
     score: int
