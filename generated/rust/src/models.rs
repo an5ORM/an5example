@@ -9,16 +9,19 @@ use crate::filters::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     /// Primary key for the Order table (auto-generated UUID)
-    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Foreign key linking to the User model who placed the order
     pub user_id: String,
     /// Total cost amount of the order
-    pub total: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
     /// Order status: open, paid, shipped, cancelled
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     /// The date and time when the order was created
-    pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<Box<super::models::User>>,
 }
@@ -26,11 +29,11 @@ pub struct Order {
 /// Type-safe WHERE filter for Order queries.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OrderWhereInput {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "AND", skip_serializing_if = "Option::is_none")]
     pub and: Option<Vec<OrderWhereInput>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "OR", skip_serializing_if = "Option::is_none")]
     pub or: Option<Vec<OrderWhereInput>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "NOT", skip_serializing_if = "Option::is_none")]
     pub not: Option<Box<OrderWhereInput>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<StringFilter>,
@@ -108,29 +111,42 @@ pub struct OrderFindFirstArgs {
     pub order_by: Option<OrderOrderByInput>,
 }
 
-/// ORM-style args for Order.find_unique() / count().
+/// ORM-style args for Order.find_unique() / count() / delete().
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OrderFindUniqueArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub where_: Option<OrderWhereInput>,
 }
 
+/// ORM-style args for Order.update().
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OrderUpdateArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_: Option<OrderWhereInput>,
+    #[serde(default)]
+    pub data: OrderUpdateInput,
+}
+
 /// Represents a registered user in the database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     /// Primary key for the User table (auto-generated UUID)
-    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Unique email address used for login and notifications
     pub email: String,
     /// Display name of the user
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Whether the user account is active
-    pub is_active: bool,
+    #[serde(default, deserialize_with = "deserialize_option_bool_flexible", skip_serializing_if = "Option::is_none")]
+    pub is_active: Option<bool>,
     /// Accumulated score used in aggregation examples
-    pub score: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score: Option<i64>,
     /// Timestamp when the user profile was created
-    pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orders: Option<Vec<super::models::Order>>,
 }
@@ -138,11 +154,11 @@ pub struct User {
 /// Type-safe WHERE filter for User queries.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UserWhereInput {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "AND", skip_serializing_if = "Option::is_none")]
     pub and: Option<Vec<UserWhereInput>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "OR", skip_serializing_if = "Option::is_none")]
     pub or: Option<Vec<UserWhereInput>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "NOT", skip_serializing_if = "Option::is_none")]
     pub not: Option<Box<UserWhereInput>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<StringFilter>,
@@ -228,10 +244,19 @@ pub struct UserFindFirstArgs {
     pub order_by: Option<UserOrderByInput>,
 }
 
-/// ORM-style args for User.find_unique() / count().
+/// ORM-style args for User.find_unique() / count() / delete().
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UserFindUniqueArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub where_: Option<UserWhereInput>,
+}
+
+/// ORM-style args for User.update().
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UserUpdateArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_: Option<UserWhereInput>,
+    #[serde(default)]
+    pub data: UserUpdateInput,
 }
 

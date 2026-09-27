@@ -68,8 +68,72 @@ impl Dialect {
     }
 }
 
+/// A typed bind parameter produced by the query builders.
+///
+/// Values keep their Rust type so drivers can bind them natively (a Bool
+/// must not become the string "true" when the column is an integer).
+#[derive(Debug, Clone, PartialEq)]
+pub enum BindValue {
+    Text(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    /// RFC 3339 timestamp.
+    DateTime(String),
+}
+
+impl BindValue {
+    /// Textual rendering, useful for logging or drivers that take strings.
+    pub fn as_str(&self) -> String {
+        match self {
+            BindValue::Text(v) => v.clone(),
+            BindValue::Int(v) => v.to_string(),
+            BindValue::Float(v) => v.to_string(),
+            BindValue::Bool(v) => v.to_string(),
+            BindValue::DateTime(v) => v.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for BindValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl From<&str> for BindValue {
+    fn from(v: &str) -> Self {
+        BindValue::Text(v.to_string())
+    }
+}
+
+impl From<String> for BindValue {
+    fn from(v: String) -> Self {
+        BindValue::Text(v)
+    }
+}
+
+impl From<i64> for BindValue {
+    fn from(v: i64) -> Self {
+        BindValue::Int(v)
+    }
+}
+
+impl From<f64> for BindValue {
+    fn from(v: f64) -> Self {
+        BindValue::Float(v)
+    }
+}
+
+impl From<bool> for BindValue {
+    fn from(v: bool) -> Self {
+        BindValue::Bool(v)
+    }
+}
+
 /// Type-safe filter for string fields.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StringFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equals: Option<String>,
@@ -97,6 +161,7 @@ pub struct StringFilter {
 
 /// Type-safe filter for integer fields.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IntFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equals: Option<i64>,
@@ -118,6 +183,7 @@ pub struct IntFilter {
 
 /// Type-safe filter for float / decimal fields.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NumberFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equals: Option<f64>,
@@ -137,15 +203,66 @@ pub struct NumberFilter {
     pub not_in: Vec<f64>,
 }
 
+/// Deserializes a boolean that some engines store as 0/1 or "0"/"1"
+/// (SQLite, MySQL TINYINT, MSSQL BIT via JSON).
+pub fn deserialize_bool_flexible<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Bool(b) => Ok(b),
+        serde_json::Value::Number(n) => Ok(n.as_i64().unwrap_or(0) != 0),
+        serde_json::Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "t" | "yes" | "y" => Ok(true),
+            "0" | "false" | "f" | "no" | "n" | "" => Ok(false),
+            _ => Err(serde::de::Error::custom(format!("cannot parse {s:?} as a boolean"))),
+        },
+        _ => Err(serde::de::Error::custom("expected a boolean value")),
+    }
+}
+
+/// Optional variant of deserialize_bool_flexible.
+pub fn deserialize_option_bool_flexible<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Null => Ok(None),
+        other => {
+            let as_bool = match other {
+                serde_json::Value::Bool(b) => b,
+                serde_json::Value::Number(n) => n.as_i64().unwrap_or(0) != 0,
+                serde_json::Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+                    "1" | "true" | "t" | "yes" | "y" => true,
+                    "0" | "false" | "f" | "no" | "n" | "" => false,
+                    _ => {
+                        return Err(serde::de::Error::custom(format!(
+                            "cannot parse {s:?} as a boolean"
+                        )))
+                    }
+                },
+                _ => return Err(serde::de::Error::custom("expected a boolean value")),
+            };
+            Ok(Some(as_bool))
+        }
+    }
+}
+
 /// Type-safe filter for boolean fields.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BoolFilter {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_option_bool_flexible",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub equals: Option<bool>,
 }
 
 /// Type-safe filter for datetime fields.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DateTimeFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equals: Option<DateTime<Utc>>,
@@ -163,176 +280,8 @@ pub struct DateTimeFilter {
 
 // ─── SQL fragment builders (shared) ─────────────────────────────────────────
 
-pub(crate) fn push_string_filter(
-    col: &str,
-    f: &StringFilter,
-    dialect: Dialect,
-    args: &mut Vec<String>,
-    parts: &mut Vec<String>,
-) {
-    let ph = |args: &Vec<String>| dialect.placeholder(args.len() + 1);
-    if let Some(v) = &f.equals {
-        args.push(v.clone());
-        parts.push(format!("{} = {}", col, ph(args)));
-    }
-    if let Some(v) = &f.not {
-        args.push(v.clone());
-        parts.push(format!("{} <> {}", col, ph(args)));
-    }
-    if let Some(v) = &f.contains {
-        args.push(format!("%{}%", v));
-        parts.push(format!("{} LIKE {}", col, ph(args)));
-    }
-    if let Some(v) = &f.starts_with {
-        args.push(format!("{}%", v));
-        parts.push(format!("{} LIKE {}", col, ph(args)));
-    }
-    if let Some(v) = &f.ends_with {
-        args.push(format!("%{}", v));
-        parts.push(format!("{} LIKE {}", col, ph(args)));
-    }
-    if let Some(v) = &f.gt {
-        args.push(v.clone());
-        parts.push(format!("{} > {}", col, ph(args)));
-    }
-    if let Some(v) = &f.gte {
-        args.push(v.clone());
-        parts.push(format!("{} >= {}", col, ph(args)));
-    }
-    if let Some(v) = &f.lt {
-        args.push(v.clone());
-        parts.push(format!("{} < {}", col, ph(args)));
-    }
-    if let Some(v) = &f.lte {
-        args.push(v.clone());
-        parts.push(format!("{} <= {}", col, ph(args)));
-    }
-    if !f.in_list.is_empty() {
-        let mut phs = Vec::new();
-        for v in &f.in_list {
-            args.push(v.clone());
-            phs.push(ph(args));
-        }
-        parts.push(format!("{} IN ({})", col, phs.join(", ")));
-    }
-    if !f.not_in.is_empty() {
-        let mut phs = Vec::new();
-        for v in &f.not_in {
-            args.push(v.clone());
-            phs.push(ph(args));
-        }
-        parts.push(format!("{} NOT IN ({})", col, phs.join(", ")));
-    }
-}
 
-pub(crate) fn push_int_filter(
-    col: &str,
-    f: &IntFilter,
-    dialect: Dialect,
-    args: &mut Vec<String>,
-    parts: &mut Vec<String>,
-) {
-    let ph = |args: &Vec<String>| dialect.placeholder(args.len() + 1);
-    if let Some(v) = f.equals {
-        args.push(v.to_string());
-        parts.push(format!("{} = {}", col, ph(args)));
-    }
-    if let Some(v) = f.not {
-        args.push(v.to_string());
-        parts.push(format!("{} <> {}", col, ph(args)));
-    }
-    if let Some(v) = f.gt {
-        args.push(v.to_string());
-        parts.push(format!("{} > {}", col, ph(args)));
-    }
-    if let Some(v) = f.gte {
-        args.push(v.to_string());
-        parts.push(format!("{} >= {}", col, ph(args)));
-    }
-    if let Some(v) = f.lt {
-        args.push(v.to_string());
-        parts.push(format!("{} < {}", col, ph(args)));
-    }
-    if let Some(v) = f.lte {
-        args.push(v.to_string());
-        parts.push(format!("{} <= {}", col, ph(args)));
-    }
-    if !f.in_list.is_empty() {
-        let mut phs = Vec::new();
-        for v in &f.in_list {
-            args.push(v.to_string());
-            phs.push(ph(args));
-        }
-        parts.push(format!("{} IN ({})", col, phs.join(", ")));
-    }
-}
 
-pub(crate) fn push_number_filter(
-    col: &str,
-    f: &NumberFilter,
-    dialect: Dialect,
-    args: &mut Vec<String>,
-    parts: &mut Vec<String>,
-) {
-    let ph = |args: &Vec<String>| dialect.placeholder(args.len() + 1);
-    if let Some(v) = f.equals {
-        args.push(v.to_string());
-        parts.push(format!("{} = {}", col, ph(args)));
-    }
-    if let Some(v) = f.not {
-        args.push(v.to_string());
-        parts.push(format!("{} <> {}", col, ph(args)));
-    }
-    if let Some(v) = f.gt {
-        args.push(v.to_string());
-        parts.push(format!("{} > {}", col, ph(args)));
-    }
-    if let Some(v) = f.gte {
-        args.push(v.to_string());
-        parts.push(format!("{} >= {}", col, ph(args)));
-    }
-    if let Some(v) = f.lt {
-        args.push(v.to_string());
-        parts.push(format!("{} < {}", col, ph(args)));
-    }
-    if let Some(v) = f.lte {
-        args.push(v.to_string());
-        parts.push(format!("{} <= {}", col, ph(args)));
-    }
-}
 
-pub(crate) fn push_datetime_filter(
-    col: &str,
-    f: &DateTimeFilter,
-    dialect: Dialect,
-    args: &mut Vec<String>,
-    parts: &mut Vec<String>,
-) {
-    let ph = |args: &Vec<String>| dialect.placeholder(args.len() + 1);
-    if let Some(v) = &f.equals {
-        args.push(v.to_rfc3339());
-        parts.push(format!("{} = {}", col, ph(args)));
-    }
-    if let Some(v) = &f.not {
-        args.push(v.to_rfc3339());
-        parts.push(format!("{} <> {}", col, ph(args)));
-    }
-    if let Some(v) = &f.gt {
-        args.push(v.to_rfc3339());
-        parts.push(format!("{} > {}", col, ph(args)));
-    }
-    if let Some(v) = &f.gte {
-        args.push(v.to_rfc3339());
-        parts.push(format!("{} >= {}", col, ph(args)));
-    }
-    if let Some(v) = &f.lt {
-        args.push(v.to_rfc3339());
-        parts.push(format!("{} < {}", col, ph(args)));
-    }
-    if let Some(v) = &f.lte {
-        args.push(v.to_rfc3339());
-        parts.push(format!("{} <= {}", col, ph(args)));
-    }
-}
 
 

@@ -1,0 +1,26 @@
+[package]
+name = "an5example-rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "AN5 ORM example — generated Rust client running CRUD against SQLite."
+license = "MIT"
+
+[[bin]]
+name = "crud"
+path = "src/main.rs"
+
+[dependencies]
+an5-client = { path = "../../generated/rust" }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+# The generated client is driver-agnostic: the app picks the driver it needs.
+sqlx = { version = "0.8", default-features = false, features = [
+    "any",
+    "runtime-tokio",
+    "sqlite",
+] }
+
+# Use the adapter runtime from this workspace instead of a published crate.
+[patch.crates-io]
+an5-adapters = { path = "../../../an5Adapters/rust" }
