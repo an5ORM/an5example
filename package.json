@@ -19,7 +19,7 @@
     "test:dotnet": "node test/dotnet-compile-check.js",
     "test:python": "(python -m compileall -q examples/python || python3 -m compileall -q examples/python) && (python examples/python/crud.py || python3 examples/python/crud.py)",
     "test:rust": "node test/rust-example-build.js",
-    "test:example:rust": "cargo run --manifest-path examples/rust/Cargo.toml"
+    "test:example:rust": "node test/rust-example-build.js --run-only"
   },
   "devDependencies": {
     "@an5/adapters": "file:../an5Adapters",

@@ -5,12 +5,19 @@
  * The generated crate is a type-safe query builder, so this script:
  *   1. `cargo build` the generated client (catches codegen regressions)
  *   2. `cargo run` examples/rust, which executes the generated SQL against a
- *      temporary SQLite database via rusqlite.
+ *      temporary SQLite database through the generated model handles.
  *
- * Skips gracefully when cargo is not installed. Uses a temp CARGO_TARGET_DIR
- * because the repo may live on a mount that cannot execute build scripts.
+ * `an5-adapters` is not published on crates.io yet, so the adapter has to be
+ * resolved to a local checkout. The location is discovered here and passed to
+ * cargo as a `[patch.crates-io]` override instead of being hardcoded in
+ * examples/rust/Cargo.toml, because that relative path is only valid inside the
+ * monorepo checkout and breaks in a standalone an5example clone.
  *
- * Run: node test/rust-example-build.js
+ * Pass --run-only to skip the client build step and just run the example.
+ *
+ * Skips gracefully when cargo or the adapter checkout is missing.
+ *
+ * Run: node test/rust-example-build.js [--run-only]
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -20,6 +27,22 @@ const path = require('path');
 const exampleRoot = path.join(__dirname, '..');
 const generatedDir = path.join(exampleRoot, 'generated', 'rust');
 const exampleDir = path.join(exampleRoot, 'examples', 'rust');
+const runOnly = process.argv.includes('--run-only');
+
+/**
+ * Locate the `an5Adapters/rust` crate. Looks beside this repo first (monorepo
+ * layout), then walks up in case an5example was cloned inside a workspace.
+ */
+function findAdapterDir() {
+  const candidates = [
+    path.resolve(exampleRoot, '..', 'an5Adapters', 'rust'),
+    path.resolve(exampleRoot, '..', '..', 'an5Adapters', 'rust'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'Cargo.toml'))) return dir;
+  }
+  return null;
+}
 
 function haveCargo() {
   try {
@@ -43,31 +66,31 @@ if (!haveCargo()) {
   process.exit(0);
 }
 
+const adapterDir = findAdapterDir();
+if (!adapterDir) {
+  console.log('rust-example-build: an5Adapters/rust not found (an5-adapters is not on crates.io yet), skipping');
+  process.exit(0);
+}
+
 const targetDir = process.env.CARGO_TARGET_DIR || path.join(os.tmpdir(), 'an5-cargo-target');
 fs.mkdirSync(targetDir, { recursive: true });
 const env = { ...process.env, CARGO_TARGET_DIR: targetDir };
-
-// `an5-adapters` is not on crates.io yet, so point cargo at the workspace copy.
-// Without this the generated client cannot resolve its runtime dependency.
-const adapterDir = path.resolve(exampleRoot, '..', 'an5Adapters', 'rust');
-if (!fs.existsSync(path.join(adapterDir, 'Cargo.toml'))) {
-  console.log('rust-example-build: an5Adapters/rust not available, skipping');
-  process.exit(0);
-}
-const patch = `patch.crates-io.an5-adapters.path="${adapterDir}"`;
+const cargoConfig = [`--config`, `patch.crates-io.an5-adapters.path="${adapterDir}"`];
 
 try {
-  console.log('[1/2] build generated an5client crate');
-  execFileSync('cargo', ['--config', patch, 'build'], {
-    cwd: generatedDir,
+  if (!runOnly) {
+    console.log('[1/2] build generated an5client crate');
+    execFileSync('cargo', [...cargoConfig, 'build'], { cwd: generatedDir, stdio: 'inherit', env });
+  }
+
+  console.log(runOnly ? 'run Rust CRUD example against SQLite' : '[2/2] run Rust CRUD example against SQLite');
+  execFileSync('cargo', [...cargoConfig, 'run', '--quiet'], {
+    cwd: exampleDir,
     stdio: 'inherit',
     env,
   });
 
-  console.log('[2/2] run Rust CRUD example against SQLite');
-  execFileSync('cargo', ['run', '--quiet'], { cwd: exampleDir, stdio: 'inherit', env });
-
-  console.log('an5example Rust client build + CRUD example passed');
+  console.log('an5example Rust CRUD example passed');
 } catch (err) {
   const msg = String((err && err.message) || err);
   if (/offline|network|failed to download|no matching package|failed to query/i.test(msg)) {

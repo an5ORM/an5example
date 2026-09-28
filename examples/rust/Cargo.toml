@@ -21,6 +21,7 @@ sqlx = { version = "0.8", default-features = false, features = [
     "sqlite",
 ] }
 
-# Use the adapter runtime from this workspace instead of a published crate.
-[patch.crates-io]
-an5-adapters = { path = "../../../an5Adapters/rust" }
+# `an5-adapters` is not on crates.io yet, so it is patched to a local checkout
+# at run time by test/rust-example-build.js, which discovers the workspace path.
+# A relative [patch] path is intentionally omitted here: it would only resolve
+# inside the monorepo and break in a standalone an5example clone.
