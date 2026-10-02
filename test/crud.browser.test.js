@@ -21,13 +21,11 @@ async function main() {
     rawDb.run(stmt);
   }
 
-  // SQLite-friendly metadata (strip "[dbo]." prefixes and brackets).
-  const sqliteTables = {};
-  for (const [model, table] of Object.entries(generated.modelToTable)) {
-    sqliteTables[model] = String(table).replace(/^\[dbo\]\./, '').replace(/^\[|\]$/g, '');
-  }
+  // The generated metadata is handed over as it is: the table names are already
+  // SQLite's, because the config names a SQLite connection and the generator reads
+  // the provider from it. This used to strip a "[dbo]." prefix by hand.
   setAdapterMetadata({
-    modelToTable: sqliteTables,
+    modelToTable: generated.modelToTable,
     modelFields: generated.modelFields,
     relationMap: generated.relationMap,
   });

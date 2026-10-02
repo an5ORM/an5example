@@ -57,17 +57,16 @@ func main() {
 		}
 	}
 
+	// The table names come from the generated metadata, which is SQLite's because
+	// an5Orm.config.js names a SQLite connection. This used to override them by hand.
 	ctx := an5.NewAn5DbContextWithConnStr(db, "sqlite")
-	// Generated clients target [dbo]. tables by default; override for SQLite.
-	ctx.Users.TableName = "users"
-	ctx.Orders.TableName = "orders"
 
-	alice := an5.User{Id: "u1", Email: "alice@example.com", Name: an5.StringPtr("Alice"), Score: "10", IsActive: true, CreatedAt: timeNow()}
+	alice := an5.User{Id: "u1", Email: "alice@example.com", Name: an5.StringPtr("Alice"), Score: 10, IsActive: true, CreatedAt: timeNow()}
 	if _, err := ctx.User.Create(context.Background(), &alice); err != nil {
 		panic(err)
 	}
 
-	if _, err := ctx.Orders.Create(context.Background(), &an5.Order{Id: "o1", UserId: alice.Id, Total: "250", Status: an5.StringPtr("open"), CreatedAt: timeNow()}); err != nil {
+	if _, err := ctx.Orders.Create(context.Background(), &an5.Order{Id: "o1", UserId: alice.Id, Total: 250, Status: an5.StringPtr("open"), CreatedAt: timeNow()}); err != nil {
 		panic(err)
 	}
 

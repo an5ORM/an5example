@@ -11,7 +11,7 @@ type User struct {
 	Email string `json:"email" db:"email"`
 	Name *string `json:"name,omitempty" db:"name"`
 	IsActive bool `json:"isActive" db:"is_active"`
-	Score string `json:"score" db:"score"`
+	Score int `json:"score" db:"score"`
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 
 	// Relations
@@ -29,7 +29,7 @@ type UserWhereInput struct {
 	Email *StringFilter
 	Name *StringFilter
 	IsActive *BoolFilter
-	Score *StringFilter
+	Score *IntFilter
 	CreatedAt *DateTimeFilter
 }
 
@@ -48,7 +48,7 @@ type UserCreateInput struct {
 	Email string
 	Name *string
 	IsActive *bool
-	Score *string
+	Score *int
 	CreatedAt *time.Time
 }
 
@@ -57,7 +57,7 @@ type UserUpdateInput struct {
 	Email *string
 	Name *string
 	IsActive *bool
-	Score *string
+	Score *int
 	CreatedAt *time.Time
 }
 

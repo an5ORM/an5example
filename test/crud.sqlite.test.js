@@ -3,7 +3,7 @@
  *
  * Run: npm run build && node test/crud.sqlite.test.js
  */
-const assert = require('assert');
+const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 
@@ -14,14 +14,16 @@ const { runCrudSuite } = require('./crud-suite.js');
 const DB_FILE = path.join(__dirname, '..', 'crud-example.sqlite');
 if (fs.existsSync(DB_FILE)) fs.unlinkSync(DB_FILE);
 
-// Build SQLite-friendly metadata: strip "[dbo]." prefixes and brackets.
-const sqliteTables = {};
-for (const [model, table] of Object.entries(generated.modelToTable)) {
-  sqliteTables[model] = String(table).replace(/^\[dbo\]\./, '').replace(/^\[|\]$/g, '');
-}
+// The generated metadata is handed over as it is. Its table names are already
+// SQLite's, because an5Orm.config.js names a SQLite connection and the generator
+// reads the provider from it — this used to strip a "[dbo]." prefix by hand.
+assert.ok(
+  Object.values(generated.modelToTable).every((table) => !String(table).includes('dbo.')),
+  `generated table names should carry no schema prefix: ${JSON.stringify(generated.modelToTable)}`,
+);
 
 setAdapterMetadata({
-  modelToTable: sqliteTables,
+  modelToTable: generated.modelToTable,
   modelFields: generated.modelFields,
   relationMap: generated.relationMap,
 });

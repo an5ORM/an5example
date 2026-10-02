@@ -3,14 +3,14 @@ package an5client
 
 // ModelToTable maps model name variations to fully-qualified SQL table names.
 var ModelToTable = map[string]string{
-	"Order": "[dbo].[orders]",
-	"order": "[dbo].[orders]",
-	"Orders": "[dbo].[orders]",
-	"orders": "[dbo].[orders]",
-	"User": "[dbo].[users]",
-	"user": "[dbo].[users]",
-	"Users": "[dbo].[users]",
-	"users": "[dbo].[users]",
+	"Order": "orders",
+	"order": "orders",
+	"Orders": "orders",
+	"orders": "orders",
+	"User": "users",
+	"user": "users",
+	"Users": "users",
+	"users": "users",
 }
 
 // ModelPrimaryKeys maps model names to their primary key column name.

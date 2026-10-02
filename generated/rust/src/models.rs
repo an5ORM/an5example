@@ -15,7 +15,7 @@ pub struct Order {
     pub user_id: String,
     /// Total cost amount of the order
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total: Option<i64>,
+    pub total: Option<i32>,
     /// Order status: open, paid, shipped, cancelled
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -67,7 +67,7 @@ pub struct OrderOrderByInput {
 pub struct OrderCreateInput {
     pub user_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total: Option<i64>,
+    pub total: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,7 +80,7 @@ pub struct OrderUpdateInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total: Option<i64>,
+    pub total: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -143,7 +143,7 @@ pub struct User {
     pub is_active: Option<bool>,
     /// Accumulated score used in aggregation examples
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub score: Option<i64>,
+    pub score: Option<i32>,
     /// Timestamp when the user profile was created
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
@@ -200,7 +200,7 @@ pub struct UserCreateInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_active: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub score: Option<i64>,
+    pub score: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
 }
@@ -215,7 +215,7 @@ pub struct UserUpdateInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_active: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub score: Option<i64>,
+    pub score: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
 }

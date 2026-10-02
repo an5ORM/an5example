@@ -15,12 +15,10 @@ function ts(offsetDays = 0): string {
   return d.toISOString();
 }
 
-// SQLite-friendly metadata: strip "[dbo]." prefixes and brackets.
-const sqliteTables: Record<string, string> = {};
-for (const [model, table] of Object.entries(modelToTable)) {
-  sqliteTables[model] = String(table).replace(/^\[dbo\]\./, '').replace(/^\[|\]$/g, '');
-}
-setAdapterMetadata({ modelToTable: sqliteTables, modelFields, relationMap });
+// The metadata is passed through as generated. The table names are already
+// SQLite's, because an5Orm.config.js names a SQLite connection and the generator
+// reads the provider from it; this used to strip a "[dbo]." prefix by hand.
+setAdapterMetadata({ modelToTable, modelFields, relationMap });
 
 // Typed model delegates (standard ORM access): `db.user` / `db.order` resolve
 // through the adapter proxy with full autocomplete and argument checking.

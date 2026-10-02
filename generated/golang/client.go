@@ -125,10 +125,10 @@ func NewAn5DbContext(db *sql.DB) *An5DbContext {
 func NewAn5DbContextWithConnStr(db *sql.DB, connStr string) *An5DbContext {
 	d := detectDialect(connStr)
 	ctx := &An5DbContext{DB: db, Dialect: d}
-	clientOrder := NewTableClient[Order](db, "dbo.orders", d)
+	clientOrder := NewTableClient[Order](db, "orders", d)
 	ctx.Orders = clientOrder
 	ctx.Order  = clientOrder
-	clientUser := NewTableClient[User](db, "dbo.users", d)
+	clientUser := NewTableClient[User](db, "users", d)
 	ctx.Users = clientUser
 	ctx.User  = clientUser
 	return ctx
