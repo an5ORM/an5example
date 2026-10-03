@@ -39,6 +39,7 @@ try {
       '  <ItemGroup>',
       '    <PackageReference Include="Npgsql" Version="8.0.6" />',
       '    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />',
+      '    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />',
       '  </ItemGroup>',
       '</Project>',
       '',
