@@ -92,28 +92,28 @@ func detectDialect(connStr string) Dialect {
 	if strings.HasPrefix(l, "postgres://") || strings.HasPrefix(l, "postgresql://") || strings.Contains(l, "port=5432") {
 		return DialectPostgres
 	}
-	if strings.HasPrefix(l, "sqlite://") || strings.HasPrefix(l, "sqlite:") || strings.HasPrefix(l, "file:") || strings.HasSuffix(l, ".db") || strings.HasSuffix(l, ".sqlite") || strings.HasSuffix(l, ".sqlite3") || l == ":memory:" {
+	if l == "sqlite" || strings.HasPrefix(l, "sqlite://") || strings.HasPrefix(l, "sqlite:") || strings.HasPrefix(l, "file:") || strings.HasSuffix(l, ".db") || strings.HasSuffix(l, ".sqlite") || strings.HasSuffix(l, ".sqlite3") || l == ":memory:" {
 		return DialectSqlite
 	}
 	return DialectMssql
 }
 
 // Pointer helpers
-func StringPtr(s string) *string   { return &s }
-func IntPtr(i int) *int            { return &i }
-func Int64Ptr(i int64) *int64      { return &i }
-func Float64Ptr(f float64) *float64 { return &f }
-func BoolPtr(b bool) *bool         { return &b }
+func StringPtr(s string) *string          { return &s }
+func IntPtr(i int) *int                   { return &i }
+func Int64Ptr(i int64) *int64             { return &i }
+func Float64Ptr(f float64) *float64       { return &f }
+func BoolPtr(b bool) *bool                { return &b }
 func SortOrderPtr(s SortOrder) *SortOrder { return &s }
 
 // An5DbContext represents the main ORM database context.
 type An5DbContext struct {
 	DB      *sql.DB
 	Dialect Dialect
-	Orders *TableClient[Order]
-	Order  *TableClient[Order]
-	Users *TableClient[User]
-	User  *TableClient[User]
+	Orders  *TableClient[Order]
+	Order   *TableClient[Order]
+	Users   *TableClient[User]
+	User    *TableClient[User]
 }
 
 // NewAn5DbContext initializes the ORM context (defaults to MSSQL dialect).
@@ -127,10 +127,10 @@ func NewAn5DbContextWithConnStr(db *sql.DB, connStr string) *An5DbContext {
 	ctx := &An5DbContext{DB: db, Dialect: d}
 	clientOrder := NewTableClient[Order](db, "orders", d)
 	ctx.Orders = clientOrder
-	ctx.Order  = clientOrder
+	ctx.Order = clientOrder
 	clientUser := NewTableClient[User](db, "users", d)
 	ctx.Users = clientUser
-	ctx.User  = clientUser
+	ctx.User = clientUser
 	return ctx
 }
 
@@ -161,6 +161,7 @@ func (c *TableClient[T]) quoteName(name string) string {
 // quoteTable quotes a schema.table name for the dialect.
 func (c *TableClient[T]) quoteTable() string {
 	parts := strings.Split(c.TableName, ".")
+	if c.Dialect == DialectSqlite && len(parts) == 2 && strings.EqualFold(parts[0], "dbo") { parts = parts[1:] }
 	quoted := make([]string, len(parts))
 	for i, p := range parts {
 		quoted[i] = c.quoteName(p)
@@ -279,15 +280,36 @@ func buildNumberFilter(col string, f *NumberFilter, args []interface{}, ph func(
 		return "", args
 	}
 	var parts []string
-	if f.Equals != nil { args = append(args, *f.Equals); parts = append(parts, col+" = "+ph(len(args))) }
-	if f.Not != nil    { args = append(args, *f.Not);    parts = append(parts, col+" <> "+ph(len(args))) }
-	if f.Gt != nil     { args = append(args, *f.Gt);     parts = append(parts, col+" > "+ph(len(args))) }
-	if f.Gte != nil    { args = append(args, *f.Gte);    parts = append(parts, col+" >= "+ph(len(args))) }
-	if f.Lt != nil     { args = append(args, *f.Lt);     parts = append(parts, col+" < "+ph(len(args))) }
-	if f.Lte != nil    { args = append(args, *f.Lte);    parts = append(parts, col+" <= "+ph(len(args))) }
+	if f.Equals != nil {
+		args = append(args, *f.Equals)
+		parts = append(parts, col+" = "+ph(len(args)))
+	}
+	if f.Not != nil {
+		args = append(args, *f.Not)
+		parts = append(parts, col+" <> "+ph(len(args)))
+	}
+	if f.Gt != nil {
+		args = append(args, *f.Gt)
+		parts = append(parts, col+" > "+ph(len(args)))
+	}
+	if f.Gte != nil {
+		args = append(args, *f.Gte)
+		parts = append(parts, col+" >= "+ph(len(args)))
+	}
+	if f.Lt != nil {
+		args = append(args, *f.Lt)
+		parts = append(parts, col+" < "+ph(len(args)))
+	}
+	if f.Lte != nil {
+		args = append(args, *f.Lte)
+		parts = append(parts, col+" <= "+ph(len(args)))
+	}
 	if len(f.In) > 0 {
 		phs := make([]string, len(f.In))
-		for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
+		for i, v := range f.In {
+			args = append(args, v)
+			phs[i] = ph(len(args))
+		}
 		parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
 	}
 	return strings.Join(parts, " AND "), args
@@ -299,15 +321,36 @@ func buildIntFilter(col string, f *IntFilter, args []interface{}, ph func(int) s
 		return "", args
 	}
 	var parts []string
-	if f.Equals != nil { args = append(args, *f.Equals); parts = append(parts, col+" = "+ph(len(args))) }
-	if f.Not != nil    { args = append(args, *f.Not);    parts = append(parts, col+" <> "+ph(len(args))) }
-	if f.Gt != nil     { args = append(args, *f.Gt);     parts = append(parts, col+" > "+ph(len(args))) }
-	if f.Gte != nil    { args = append(args, *f.Gte);    parts = append(parts, col+" >= "+ph(len(args))) }
-	if f.Lt != nil     { args = append(args, *f.Lt);     parts = append(parts, col+" < "+ph(len(args))) }
-	if f.Lte != nil    { args = append(args, *f.Lte);    parts = append(parts, col+" <= "+ph(len(args))) }
+	if f.Equals != nil {
+		args = append(args, *f.Equals)
+		parts = append(parts, col+" = "+ph(len(args)))
+	}
+	if f.Not != nil {
+		args = append(args, *f.Not)
+		parts = append(parts, col+" <> "+ph(len(args)))
+	}
+	if f.Gt != nil {
+		args = append(args, *f.Gt)
+		parts = append(parts, col+" > "+ph(len(args)))
+	}
+	if f.Gte != nil {
+		args = append(args, *f.Gte)
+		parts = append(parts, col+" >= "+ph(len(args)))
+	}
+	if f.Lt != nil {
+		args = append(args, *f.Lt)
+		parts = append(parts, col+" < "+ph(len(args)))
+	}
+	if f.Lte != nil {
+		args = append(args, *f.Lte)
+		parts = append(parts, col+" <= "+ph(len(args)))
+	}
 	if len(f.In) > 0 {
 		phs := make([]string, len(f.In))
-		for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
+		for i, v := range f.In {
+			args = append(args, v)
+			phs[i] = ph(len(args))
+		}
 		parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
 	}
 	return strings.Join(parts, " AND "), args
@@ -319,12 +362,30 @@ func buildDateTimeFilter(col string, f *DateTimeFilter, args []interface{}, ph f
 		return "", args
 	}
 	var parts []string
-	if f.Equals != nil { args = append(args, *f.Equals); parts = append(parts, col+" = "+ph(len(args))) }
-	if f.Not != nil    { args = append(args, *f.Not);    parts = append(parts, col+" <> "+ph(len(args))) }
-	if f.Gt != nil     { args = append(args, *f.Gt);     parts = append(parts, col+" > "+ph(len(args))) }
-	if f.Gte != nil    { args = append(args, *f.Gte);    parts = append(parts, col+" >= "+ph(len(args))) }
-	if f.Lt != nil     { args = append(args, *f.Lt);     parts = append(parts, col+" < "+ph(len(args))) }
-	if f.Lte != nil    { args = append(args, *f.Lte);    parts = append(parts, col+" <= "+ph(len(args))) }
+	if f.Equals != nil {
+		args = append(args, *f.Equals)
+		parts = append(parts, col+" = "+ph(len(args)))
+	}
+	if f.Not != nil {
+		args = append(args, *f.Not)
+		parts = append(parts, col+" <> "+ph(len(args)))
+	}
+	if f.Gt != nil {
+		args = append(args, *f.Gt)
+		parts = append(parts, col+" > "+ph(len(args)))
+	}
+	if f.Gte != nil {
+		args = append(args, *f.Gte)
+		parts = append(parts, col+" >= "+ph(len(args)))
+	}
+	if f.Lt != nil {
+		args = append(args, *f.Lt)
+		parts = append(parts, col+" < "+ph(len(args)))
+	}
+	if f.Lte != nil {
+		args = append(args, *f.Lte)
+		parts = append(parts, col+" <= "+ph(len(args)))
+	}
 	return strings.Join(parts, " AND "), args
 }
 
@@ -366,7 +427,9 @@ func (c *TableClient[T]) FindMany(ctx context.Context, args interface{}) ([]T, e
 			// rewrite SELECT to SELECT TOP
 			query = strings.Replace(query, "SELECT *", fmt.Sprintf("SELECT TOP (%d) *", take), 1)
 			query = strings.Replace(query, "SELECT "+strings.Join(func() []string {
-				if len(selectCols) == 0 { return []string{"*"} }
+				if len(selectCols) == 0 {
+					return []string{"*"}
+				}
 				return selectCols
 			}(), ", "), fmt.Sprintf("SELECT TOP (%d) *", take), 1)
 		}
@@ -675,23 +738,40 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 			var subParts []string
 			for j := 0; j < fv.Len(); j++ {
 				sub, subArgs := c.buildWhereFromStruct(fv.Index(j), argOffset+len(args))
-				if sub != "" { subParts = append(subParts, sub); args = append(args, subArgs...) }
+				if sub != "" {
+					subParts = append(subParts, sub)
+					args = append(args, subArgs...)
+				}
 			}
-			if len(subParts) > 0 { parts = append(parts, "("+strings.Join(subParts, " AND ")+")") }
+			if len(subParts) > 0 {
+				parts = append(parts, "("+strings.Join(subParts, " AND ")+")")
+			}
 			continue
 		}
 		if name == "OR" && fv.Kind() == reflect.Slice && !fv.IsNil() {
 			var subParts []string
 			for j := 0; j < fv.Len(); j++ {
 				sub, subArgs := c.buildWhereFromStruct(fv.Index(j), argOffset+len(args))
-				if sub != "" { subParts = append(subParts, sub); args = append(args, subArgs...) }
+				if sub == "" {
+					sub = "1=1"
+				}
+				subParts = append(subParts, sub)
+				args = append(args, subArgs...)
 			}
-			if len(subParts) > 0 { parts = append(parts, "("+strings.Join(subParts, " OR ")+")") }
+			if len(subParts) > 0 {
+				parts = append(parts, "("+strings.Join(subParts, " OR ")+")")
+			} else {
+				parts = append(parts, "1=0")
+			}
 			continue
 		}
 		if name == "NOT" && fv.Kind() == reflect.Ptr && !fv.IsNil() {
 			sub, subArgs := c.buildWhereFromStruct(fv.Elem(), argOffset+len(args))
-			if sub != "" { parts = append(parts, "NOT ("+sub+")"); args = append(args, subArgs...) }
+			if sub == "" {
+				sub = "1=1"
+			}
+			parts = append(parts, "NOT ("+sub+")")
+			args = append(args, subArgs...)
 			continue
 		}
 
@@ -707,22 +787,30 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 		case "StringFilter":
 			filter := elem.Interface().(StringFilter)
 			clause, newArgs := buildStringFilter(col, &filter, args, pHFunc)
-			if clause != "" { parts = append(parts, clause) }
+			if clause != "" {
+				parts = append(parts, clause)
+			}
 			args = newArgs
 		case "NumberFilter":
 			filter := elem.Interface().(NumberFilter)
 			clause, newArgs := buildNumberFilter(col, &filter, args, pHFunc)
-			if clause != "" { parts = append(parts, clause) }
+			if clause != "" {
+				parts = append(parts, clause)
+			}
 			args = newArgs
 		case "IntFilter":
 			filter := elem.Interface().(IntFilter)
 			clause, newArgs := buildIntFilter(col, &filter, args, pHFunc)
-			if clause != "" { parts = append(parts, clause) }
+			if clause != "" {
+				parts = append(parts, clause)
+			}
 			args = newArgs
 		case "DateTimeFilter":
 			filter := elem.Interface().(DateTimeFilter)
 			clause, newArgs := buildDateTimeFilter(col, &filter, args, pHFunc)
-			if clause != "" { parts = append(parts, clause) }
+			if clause != "" {
+				parts = append(parts, clause)
+			}
 			args = newArgs
 		case "bool":
 			args = append(args, elem.Bool())
@@ -760,9 +848,15 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 	var whereArgs interface{}
 
 	if len(opts) > 0 {
-		if opts[0].Take > 0 { take = opts[0].Take }
-		if opts[0].VectorField != "" { vectorField = opts[0].VectorField }
-		if opts[0].DistanceMetric != "" { distanceMetric = opts[0].DistanceMetric }
+		if opts[0].Take > 0 {
+			take = opts[0].Take
+		}
+		if opts[0].VectorField != "" {
+			vectorField = opts[0].VectorField
+		}
+		if opts[0].DistanceMetric != "" {
+			distanceMetric = opts[0].DistanceMetric
+		}
 		whereArgs = opts[0].Where
 	}
 
@@ -776,8 +870,12 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 	queryArgs := append([]interface{}{vecStr}, whereQueryArgs...)
 	if c.Dialect == DialectPostgres {
 		op := "<=>"
-		if strings.EqualFold(distanceMetric, "euclidean") { op = "<->" }
-		if strings.EqualFold(distanceMetric, "dot") { op = "<#>" }
+		if strings.EqualFold(distanceMetric, "euclidean") {
+			op = "<->"
+		}
+		if strings.EqualFold(distanceMetric, "dot") {
+			op = "<#>"
+		}
 		vcol := c.quoteName(vectorField)
 		sqlQuery = fmt.Sprintf("SELECT *, (%s %s $1::vector) AS distance FROM %s", vcol, op, c.quoteTable())
 		if whereCl != "" {
@@ -840,16 +938,29 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 		switch strings.ToLower(distanceMetric) {
 		case "euclidean":
 			var sum float64
-			for i := range vector { d := vector[i] - rowVec[i]; sum += d * d }
+			for i := range vector {
+				d := vector[i] - rowVec[i]
+				sum += d * d
+			}
 			dist = math.Sqrt(sum)
 		case "dot":
 			var dot float64
-			for i := range vector { dot += vector[i] * rowVec[i] }
+			for i := range vector {
+				dot += vector[i] * rowVec[i]
+			}
 			dist = -dot
 		default: // cosine
 			var dot, m1, m2 float64
-			for i := range vector { dot += vector[i] * rowVec[i]; m1 += vector[i] * vector[i]; m2 += rowVec[i] * rowVec[i] }
-			if m1 > 0 && m2 > 0 { dist = 1.0 - dot/(math.Sqrt(m1)*math.Sqrt(m2)) } else { dist = 1.0 }
+			for i := range vector {
+				dot += vector[i] * rowVec[i]
+				m1 += vector[i] * vector[i]
+				m2 += rowVec[i] * rowVec[i]
+			}
+			if m1 > 0 && m2 > 0 {
+				dist = 1.0 - dot/(math.Sqrt(m1)*math.Sqrt(m2))
+			} else {
+				dist = 1.0
+			}
 		}
 
 		scored = append(scored, scoredItem{item: item, distance: dist})
@@ -859,7 +970,9 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 
 	var result []T
 	limit := take
-	if limit > len(scored) { limit = len(scored) }
+	if limit > len(scored) {
+		limit = len(scored)
+	}
 	for i := 0; i < limit; i++ {
 		result = append(result, scored[i].item)
 	}
@@ -899,4 +1012,3 @@ func (c *TableClient[T]) toSnakeCase(s string) string {
 // Ensure unused imports are referenced
 var _ = sort.Slice
 var _ = time.Time{}
-
