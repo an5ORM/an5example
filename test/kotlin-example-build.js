@@ -55,6 +55,25 @@ function kotlinc() {
   return null;
 }
 
+function kotlinStdlib(compiler) {
+  let real = compiler;
+  try {
+    real = fs.realpathSync(compiler);
+  } catch {
+    // the compiler itself was found by the caller, so keep the path as given
+  }
+  const roots = [
+    process.env.KOTLIN_HOME,
+    path.dirname(path.dirname(real)),
+    path.dirname(path.dirname(path.dirname(real))),
+  ].filter(Boolean);
+  for (const root of roots) {
+    const jar = path.join(root, 'lib', 'kotlin-stdlib.jar');
+    if (fs.existsSync(jar)) return jar;
+  }
+  return null;
+}
+
 function javac() {
   if (process.env.JAVA_HOME && fs.existsSync(path.join(process.env.JAVA_HOME, 'bin', 'javac'))) {
     return path.join(process.env.JAVA_HOME, 'bin', 'javac');
@@ -96,8 +115,11 @@ try {
   execFileSync(javaCompiler, ['-d', javaClasses, `@${javaList}`], { stdio: 'inherit' });
 
   // The stdlib travels with the compiler, so it is both on the compile classpath and the
-  // runtime one; without it the class files load and then fail on the first null check.
-  const stdlib = path.join(path.dirname(path.dirname(compiler)), 'lib', 'kotlin-stdlib.jar');
+  // one the JVM needs at runtime; without it the class files load and then fail on the first
+  // null check. Where it sits depends on how the compiler was installed — a KOTLIN_HOME
+  // distro has it under `lib`, an apt/symlink install only shows it after resolving the
+  // link — so the candidates are tried in order rather than assumed from one layout.
+  const stdlib = kotlinStdlib(compiler);
   const kotlinFiles = [
     ...sources(path.join(adapters, 'kotlin', 'src', 'main', 'kotlin'), '.kt'),
     ...sources(generatedKotlin, '.kt'),
@@ -130,6 +152,10 @@ try {
   }
 
   const javaBin = javaCompiler.replace(/javac$/, 'java');
+  if (!stdlib) {
+    console.log('kotlin-example-build: kotlin-stdlib.jar not found next to the compiler, compiled but not run');
+    process.exit(0);
+  }
   const classpath = [kotlinClasses, javaClasses, stdlib, driverJar]
     .filter((entry) => fs.existsSync(entry))
     .join(path.delimiter);
