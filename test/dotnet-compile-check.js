@@ -12,6 +12,28 @@ const os = require('os');
 const path = require('path');
 
 const exampleRoot = path.join(__dirname, '..');
+
+function canRun(command) {
+  try {
+    execFileSync(command, ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Checked before anything is created: every other language gate in this repository skips
+// with the reason when its toolchain is absent, and a job without the .NET SDK is not a
+// job that failed to compile the client.
+if (!canRun('dotnet')) {
+  console.log('dotnet-compile-check: .NET SDK not installed, skipping');
+  process.exit(0);
+}
+if (!fs.existsSync(path.join(exampleRoot, 'generated', 'dotnet', 'An5DbContext.cs'))) {
+  console.log('dotnet-compile-check: generated/dotnet not found, run `npm run generate` first');
+  process.exit(0);
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'an5-dotnet-check-'));
 
 function copyFile(src, dest) {

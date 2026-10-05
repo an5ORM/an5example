@@ -33,6 +33,24 @@ module.exports = {
     rust: {
       outputDir: 'generated/rust',
     },
+    /**
+     * Java output configuration
+     */
+    java: {
+      outputDir: 'generated/java',
+    },
+    /**
+     * Kotlin output configuration
+     */
+    kotlin: {
+      outputDir: 'generated/kotlin',
+    },
+    /**
+     * Swift output configuration
+     */
+    swift: {
+      outputDir: 'generated/swift',
+    },
   },
 
   generation: {
