@@ -900,3 +900,4 @@ func (c *TableClient[T]) toSnakeCase(s string) string {
 // Ensure unused imports are referenced
 var _ = sort.Slice
 var _ = time.Time{}
+

@@ -13,6 +13,11 @@
 - Generated Java, Kotlin and Swift clients under `generated/`, from the generators an5Orm
   1.2.0 added.
 
+### Changed
+- Regenerate `generated/rust` with `vector_search`, so the example's Rust client matches the
+  an5Orm generator. `npm run test:rust` builds the regenerated crate and runs the example
+  against SQLite, which is what proves the new method compiles.
+
 ### Fixed
 - **The .NET example could not run from a checkout** — `UseAppHost=false`, so it runs as
   `dotnet <dll>` without needing a native apphost, and the `Microsoft.Data.Sqlite` and

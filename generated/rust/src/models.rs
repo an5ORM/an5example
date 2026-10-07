@@ -118,6 +118,20 @@ pub struct OrderFindUniqueArgs {
     pub where_: Option<OrderWhereInput>,
 }
 
+/// ORM-style args for Order.vector_search().
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OrderVectorSearchArgs {
+    pub vector: Vec<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub take: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_: Option<OrderWhereInput>,
+    #[serde(default)]
+    pub vector_field: String,
+    #[serde(default)]
+    pub distance_metric: String,
+}
+
 /// ORM-style args for Order.update().
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OrderUpdateArgs {
@@ -249,6 +263,20 @@ pub struct UserFindFirstArgs {
 pub struct UserFindUniqueArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub where_: Option<UserWhereInput>,
+}
+
+/// ORM-style args for User.vector_search().
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UserVectorSearchArgs {
+    pub vector: Vec<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub take: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_: Option<UserWhereInput>,
+    #[serde(default)]
+    pub vector_field: String,
+    #[serde(default)]
+    pub distance_metric: String,
 }
 
 /// ORM-style args for User.update().
