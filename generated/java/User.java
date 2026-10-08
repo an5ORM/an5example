@@ -23,6 +23,7 @@ public class User {
   private String name;
   private Boolean isActive;
   private Integer score;
+  private double[] embedding;
   private LocalDateTime createdAt;
 
   public String getId() {
@@ -95,6 +96,20 @@ public class User {
     return this;
   }
 
+  public double[] getEmbedding() {
+    return this.embedding;
+  }
+
+  public void setEmbedding(double[] value) {
+    this.embedding = value;
+  }
+
+  /** Sets Embedding and returns this instance, for chained construction. */
+  public User withEmbedding(double[] value) {
+    this.embedding = value;
+    return this;
+  }
+
   public LocalDateTime getCreatedAt() {
     return this.createdAt;
   }
@@ -135,6 +150,7 @@ public class User {
     value.name = An5Values.asString(row.get("name"));
     value.isActive = An5Values.asBoolean(row.get("isActive"));
     value.score = An5Values.asInteger(row.get("score"));
+    value.embedding = An5Values.asVector(row.get("embedding"));
     value.createdAt = An5Values.asLocalDateTime(row.get("createdAt"));
     if (row.get("orders") instanceof List) {
       List<Order> related = new ArrayList<Order>();
@@ -172,6 +188,9 @@ public class User {
     }
     if (this.score != null) {
       values.put("score", this.score);
+    }
+    if (this.embedding != null) {
+      values.put("embedding", this.embedding);
     }
     if (this.createdAt != null) {
       values.put("createdAt", this.createdAt);

@@ -25,6 +25,9 @@ async function runCrudSuite({ db, opts }) {
     normalizeBool = (v) => (v === true || v === 1 || v === '1' ? '1' : '0'),
     rawUserTable = 'users',
     ts = () => new Date().toISOString(),
+    // The other dialects in this harness have no `VECTOR(n)` column, so only SQLite
+    // asserts the round-trip and in-database ranking of one.
+    hasVectorColumn = false,
   } = opts;
 
   await db.$connect();
@@ -176,15 +179,44 @@ async function runCrudSuite({ db, opts }) {
   );
   assert.strictEqual(Number((await db.user.findUnique({ where: { id: alice.id } })).score), 123, 'rollback should undo the update');
 
-  // ── VECTOR SEARCH (in-memory fallback) ─────────────────────────────────────
-  const vecRows = await db.user.vectorSearch({
+  // ── VECTOR SEARCH ──────────────────────────────────────────────────────────
+  // Every database answers this one: `name` is a text column, so the adapters read it
+  // back and score it in memory, which still reports a distance per row.
+  const fallbackRows = await db.user.vectorSearch({
     vector: [1, 0, 0],
     take: 3,
     vectorField: 'name',
     distanceMetric: 'cosine',
   });
-  assert.ok(Array.isArray(vecRows));
-  assert.ok(vecRows.every((r) => typeof r.distance === 'number'));
+  assert.ok(Array.isArray(fallbackRows));
+  assert.ok(fallbackRows.every((r) => typeof r.distance === 'number'));
+
+  // SQLite is the one database here that stores a `VECTOR(n)` as float32 bytes and ranks
+  // it inside the database, so only that dialect gets the stronger claim below.
+  if (hasVectorColumn) {
+    const withVector = await db.user.update({
+      where: { id: alice.id },
+      data: { embedding: [1, 0, 0] },
+    });
+    assert.deepStrictEqual(
+      Array.from(withVector.embedding ?? []),
+      [1, 0, 0],
+      'a VECTOR(n) column round-trips as numbers'
+    );
+
+    const vecRows = await db.user.vectorSearch({
+      vector: [1, 0, 0],
+      take: 3,
+      vectorField: 'embedding',
+      distanceMetric: 'cosine',
+    });
+    assert.ok(Array.isArray(vecRows));
+    assert.ok(vecRows.every((r) => typeof r.distance === 'number'));
+    // Rows without an embedding are left out rather than ranked with a null distance.
+    assert.ok(vecRows.every((r) => r.distance !== null));
+    assert.strictEqual(vecRows[0].id, alice.id, 'the exact match ranks first');
+    assert.ok(Math.abs(vecRows[0].distance) < 1e-6, 'an identical vector has distance 0');
+  }
 
   // ── DELETE ─────────────────────────────────────────────────────────────────
   const deleted = await db.order.delete({ where: { id: bob.orders[0].id } });

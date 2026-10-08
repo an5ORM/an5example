@@ -18,6 +18,9 @@ function createDatabase(dbPath = DB_PATH) {
       name      TEXT NULL,
       isActive  INTEGER NOT NULL DEFAULT 1,
       score     INTEGER NOT NULL DEFAULT 0,
+      -- VECTOR(n) maps to BLOB on SQLite: float32 values, which the adapters rank in
+      -- the database. The column is nullable so the CRUD examples can leave it unset.
+      embedding BLOB NULL,
       createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 

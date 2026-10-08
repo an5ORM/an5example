@@ -4,6 +4,7 @@ model User {
   name      VARCHAR(255)? @description("Display name of the user")
   isActive  BOOLEAN  @default(true) @description("Whether the user account is active")
   score     INTEGER  @default(0) @description("Accumulated score used in aggregation examples")
+  embedding VECTOR(3)?   @description("Embedding vector for the semantic-search example")
   createdAt DATETIME @default(now()) @description("Timestamp when the user profile was created")
   orders    Order[]
 

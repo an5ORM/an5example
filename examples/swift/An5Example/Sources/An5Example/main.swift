@@ -63,6 +63,7 @@ func createTables(_ db: An5Db) throws {
           name TEXT NULL,
           isActive INTEGER NOT NULL DEFAULT 1,
           score INTEGER NOT NULL DEFAULT 0,
+          embedding BLOB NULL,
           createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
         )
         """)
@@ -101,15 +102,31 @@ func runExample() throws {
     try createTables(db)
 
     // ── Create ────────────────────────────────────────────────────────────────
-    let alice = try db.user.create(User(email: "alice@example.com", name: "Alice", score: 123))
+    let alice = try db.user.create(User(email: "alice@example.com", name: "Alice", score: 123, embedding: [1.0, 0.0, 0.0]))
     guard let aliceId = alice.id else {
         throw ExampleError("create did not return the generated primary key")
     }
     print("created user \(aliceId)")
 
-    _ = try db.user.create(User(email: "bob@example.com", name: "Bob", score: 7))
+    _ = try db.user.create(User(email: "bob@example.com", name: "Bob", score: 7, embedding: [0.0, 1.0, 0.0]))
     _ = try db.order.create(Order(userId: aliceId, total: 250, status: "open"))
     _ = try db.order.create(Order(userId: aliceId, total: 75, status: "paid"))
+
+    // ── Vector search ─────────────────────────────────────────────────────────
+    // A `VECTOR(n)` column is stored as float32 bytes and read back as numbers, which
+    // is what `row.vector` decodes; a column that came back empty here would mean the
+    // generated model and the stored bytes had drifted apart.
+    var aliceVectorWhere = An5Orm.UserWhere()
+    aliceVectorWhere.email = An5Orm.StringFilter.has("alice")
+    let aliceRows = try db.user.findMany(filter: aliceVectorWhere.build())
+    let readBack = aliceRows.first?.embedding ?? []
+    try check(readBack.count == 3, "the stored vector reads back as 3 numbers, got \(readBack.count)")
+    try check(abs(readBack[0] - 1.0) < 1e-6, "wrong first component: \(readBack[0])")
+
+    let ranked = try db.user.vectorSearch([1.0, 0.0, 0.0], take: 2, vectorField: "embedding", metric: .cosine)
+    print("vector search returned \(ranked.count) rows")
+    try check(ranked.count == 2, "both users carry an embedding, got \(ranked.count)")
+    try check(ranked.first?.id == aliceId, "the user whose embedding matches the query ranks first")
 
     // ── Read: typed string filter ─────────────────────────────────────────────
     var aliceWhere = An5Orm.UserWhere()

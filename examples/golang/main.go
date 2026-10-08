@@ -40,6 +40,7 @@ func main() {
 			name TEXT NULL,
 			is_active INTEGER NOT NULL DEFAULT 1,
 			score INTEGER NOT NULL DEFAULT 0,
+			embedding BLOB NULL,
 			created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 		)`,
 		`CREATE TABLE IF NOT EXISTS orders (
@@ -61,7 +62,9 @@ func main() {
 	// an5Orm.config.js names a SQLite connection. This used to override them by hand.
 	ctx := an5.NewAn5DbContextWithConnStr(db, "sqlite")
 
-	alice := an5.User{Id: "u1", Email: "alice@example.com", Name: an5.StringPtr("Alice"), Score: 10, IsActive: true, CreatedAt: timeNow()}
+	embedding := []float32{1, 0, 0}
+	bobEmbedding := []float32{0, 1, 0}
+	alice := an5.User{Id: "u1", Email: "alice@example.com", Name: an5.StringPtr("Alice"), Score: 10, IsActive: true, Embedding: &embedding, CreatedAt: timeNow()}
 	if _, err := ctx.User.Create(context.Background(), &alice); err != nil {
 		panic(err)
 	}
@@ -70,11 +73,37 @@ func main() {
 		panic(err)
 	}
 
+	if _, err := ctx.User.Create(context.Background(), &an5.User{
+		Id: "u2", Email: "bob@example.com", Name: an5.StringPtr("Bob"), Score: 7,
+		IsActive: true, Embedding: &bobEmbedding, CreatedAt: timeNow(),
+	}); err != nil {
+		panic(err)
+	}
+
 	users, err := ctx.User.FindMany(context.Background(), an5.User{Email: "alice@example.com"})
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("found %d user(s) matching alice\n", len(users))
+
+	// A `VECTOR(n)` column is stored as float32 bytes; the generated model declares it
+	// as *[]float32, so a column that fails to scan is the bug this catches.
+	if users[0].Embedding == nil || len(*users[0].Embedding) != 3 {
+		panic(fmt.Sprintf("the stored vector reads back as 3 numbers, got %v", users[0].Embedding))
+	}
+	fmt.Printf("vector read back: %v\n", *users[0].Embedding)
+
+	ranked, err := ctx.User.VectorSearch(context.Background(), []float64{1, 0, 0}, an5.VectorSearchOptions{Take: 2, VectorField: "embedding", DistanceMetric: "cosine"})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("vector search returned %d rows\n", len(ranked))
+	if len(ranked) != 2 {
+		panic(fmt.Sprintf("both users carry an embedding, got %d", len(ranked)))
+	}
+	if ranked[0].Id != "u1" {
+		panic("the user whose embedding matches the query must rank first")
+	}
 
 	orders, err := ctx.Orders.FindMany(context.Background(), an5.Order{})
 	if err != nil {

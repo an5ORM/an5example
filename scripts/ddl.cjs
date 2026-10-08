@@ -68,12 +68,15 @@ const DDL = {
   sqlite: [
     `DROP TABLE IF EXISTS orders`,
     `DROP TABLE IF EXISTS users`,
+    // `embedding` is the schema's VECTOR(n): float32 bytes, which the adapters rank
+    // inside SQLite rather than loading the column into the client.
     `CREATE TABLE users (
        id        TEXT PRIMARY KEY,
        email     TEXT NOT NULL UNIQUE,
        name      TEXT NULL,
        isActive  INTEGER NOT NULL DEFAULT 1,
        score     INTEGER NOT NULL DEFAULT 0,
+       embedding BLOB NULL,
        createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
      )`,
     `CREATE TABLE orders (

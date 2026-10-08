@@ -185,6 +185,7 @@ object An5Orm {
         val name: StringFilter? = null,
         val isActive: BoolFilter? = null,
         val score: NumberFilter? = null,
+        val embedding: StringFilter? = null,
         val createdAt: DateFilter? = null,
     ) {
         /** The filter tree as the runtime reads it. */
@@ -197,6 +198,7 @@ object An5Orm {
             name?.let { put("name", it.build()) }
             isActive?.let { put("isActive", it.build()) }
             score?.let { put("score", it.build()) }
+            embedding?.let { put("embedding", it.build()) }
             createdAt?.let { put("createdAt", it.build()) }
         }
 

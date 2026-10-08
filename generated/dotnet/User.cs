@@ -11,6 +11,7 @@ namespace An5Orm.Entities
         public string Name { get; set; }
         public bool IsActive { get; set; }
         public int Score { get; set; }
+        public float[] Embedding { get; set; }
         public DateTime CreatedAt { get; set; }
 
         // ── Relations ────────────────────────────────────────────────────────

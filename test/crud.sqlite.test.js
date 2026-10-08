@@ -35,7 +35,7 @@ const { createDatabase } = require('../scripts/db-setup.cjs');
 const raw = createDatabase(DB_FILE);
 
 async function main() {
-  await runCrudSuite({ db, opts: { label: 'an5example SQLite CRUD + relations integration', rawUserTable: 'users' } });
+  await runCrudSuite({ db, opts: { label: 'an5example SQLite CRUD + relations integration', rawUserTable: 'users', hasVectorColumn: true } });
 }
 
 main()

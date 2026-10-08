@@ -87,6 +87,8 @@ async function main() {
       opts: {
         label: `an5example live CRUD + relations integration (${dialect})`,
         rawUserTable: TABLE_NAMES[dialect].users,
+        // Only the SQLite DDL has the `VECTOR(n)` column the strong assertion needs.
+        hasVectorColumn: dialect === 'sqlite',
       },
     });
   } finally {

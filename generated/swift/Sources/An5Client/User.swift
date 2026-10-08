@@ -14,6 +14,8 @@ public struct User {
     public let isActive: Bool?
     /// `INTEGER` — Accumulated score used in aggregation examples
     public let score: Int?
+    /// `VECTOR(3)` — Embedding vector for the semantic-search example
+    public let embedding: [Double]?
     /// `DATETIME` — Timestamp when the user profile was created
     public let createdAt: Date?
 
@@ -26,6 +28,7 @@ public struct User {
         name: String? = nil,
         isActive: Bool? = nil,
         score: Int? = nil,
+        embedding: [Double]? = nil,
         createdAt: Date? = nil
     ) {
         self.id = id
@@ -33,6 +36,7 @@ public struct User {
         self.name = name
         self.isActive = isActive
         self.score = score
+        self.embedding = embedding
         self.createdAt = createdAt
     }
 
@@ -51,6 +55,7 @@ public struct User {
         self.name = row.string("name")
         self.isActive = row.bool("isActive")
         self.score = row.int("score")
+        self.embedding = row.vector("embedding")
         self.createdAt = row.date("createdAt")
         self.orders = row.related("orders").map { Order(row: $0) }
 
@@ -67,6 +72,7 @@ public struct User {
         if let value = self.name { values["name"] = value }
         if let value = self.isActive { values["isActive"] = value }
         if let value = self.score { values["score"] = value }
+        if let value = self.embedding { values["embedding"] = value }
         if let value = self.createdAt { values["createdAt"] = value }
         return values
     }

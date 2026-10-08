@@ -33,7 +33,7 @@ async function main() {
   // Adapter backed by the in-memory sql.js database.
   const db = createAn5Adapter({ db: rawDb });
 
-  await runCrudSuite({ db, opts: { label: 'an5example browser (sql.js) CRUD + relations integration', rawUserTable: 'users' } });
+  await runCrudSuite({ db, opts: { label: 'an5example browser (sql.js) CRUD + relations integration', rawUserTable: 'users', hasVectorColumn: true } });
 
   await db.$disconnect();
   rawDb.close();

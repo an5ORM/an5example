@@ -24,6 +24,7 @@ MODEL_FIELDS = {
         { "name": "name", "type": "string?", "sql": "VARCHAR(255)", "isOptional": True, "hasDefault": False, "isId": False, "description": "Display name of the user" },
         { "name": "isActive", "type": "boolean", "sql": "BOOLEAN", "isOptional": False, "hasDefault": True, "isId": False, "description": "Whether the user account is active" },
         { "name": "score", "type": "number", "sql": "INTEGER", "isOptional": False, "hasDefault": True, "isId": False, "description": "Accumulated score used in aggregation examples" },
+        { "name": "embedding", "type": "number[] | string?", "sql": "VECTOR(3)", "isOptional": True, "hasDefault": False, "isId": False, "description": "Embedding vector for the semantic-search example" },
         { "name": "createdAt", "type": "Date", "sql": "DATETIME", "isOptional": False, "hasDefault": True, "isId": False, "description": "Timestamp when the user profile was created" }
     ],
 }

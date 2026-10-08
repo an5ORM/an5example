@@ -195,9 +195,18 @@ func (c *TableClient[T]) queryAndScan(ctx context.Context, query string, args ..
 		var item T
 		val := reflect.ValueOf(&item).Elem()
 		scanArgs := make([]interface{}, len(cols))
+		vectorCols := make([]bool, len(cols))
 		for i, colName := range cols {
 			fieldVal := findFieldByDbTag(val, colName)
 			if fieldVal.IsValid() && fieldVal.CanSet() {
+				// A `VECTOR(n)` column is stored as bytes, which database/sql cannot
+				// scan into a slice, so it is read as bytes and decoded afterwards.
+				if isVectorGoType(fieldVal.Type()) {
+					var raw []byte
+					scanArgs[i] = &raw
+					vectorCols[i] = true
+					continue
+				}
 				scanArgs[i] = fieldVal.Addr().Interface()
 			} else {
 				var unused interface{}
@@ -206,6 +215,20 @@ func (c *TableClient[T]) queryAndScan(ctx context.Context, query string, args ..
 		}
 		if err := rows.Scan(scanArgs...); err != nil {
 			return nil, err
+		}
+		for i, isVector := range vectorCols {
+			if !isVector {
+				continue
+			}
+			decoded, ok := decodeVectorBytes(*(scanArgs[i].(*[]byte)))
+			if !ok {
+				continue
+			}
+			fieldVal := findFieldByDbTag(val, cols[i])
+			if !fieldVal.IsValid() || !fieldVal.CanSet() {
+				continue
+			}
+			setVectorField(fieldVal, decoded)
 		}
 		results = append(results, item)
 	}
@@ -423,7 +446,7 @@ func (c *TableClient[T]) Create(ctx context.Context, entity *T) (*T, error) {
 		fieldVal := val.Field(i)
 		if !fieldVal.IsZero() {
 			cols = append(cols, c.quoteName(dbTag))
-			args = append(args, fieldVal.Interface())
+			args = append(args, encodeVectorArg(fieldVal.Interface()))
 			phs = append(phs, c.ph(len(args)))
 		}
 	}
@@ -470,7 +493,7 @@ func (c *TableClient[T]) Update(ctx context.Context, entity *T) (*T, error) {
 			idVal = fieldVal.Interface()
 			idCol = dbTag
 		} else if !fieldVal.IsZero() {
-			args = append(args, fieldVal.Interface())
+			args = append(args, encodeVectorArg(fieldVal.Interface()))
 			sets = append(sets, c.quoteName(dbTag)+" = "+c.ph(len(args)))
 		}
 	}
@@ -825,13 +848,9 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 			continue
 		}
 
-		var rowVec []float64
-		if fieldVal.Kind() == reflect.String {
-			_ = json.Unmarshal([]byte(fieldVal.String()), &rowVec)
-		} else if fieldVal.Kind() == reflect.Slice {
-			for i := 0; i < fieldVal.Len(); i++ {
-				rowVec = append(rowVec, fieldVal.Index(i).Float())
-			}
+		rowVec := vectorComponents(fieldVal)
+		if len(rowVec) == 0 {
+			continue
 		}
 		if len(rowVec) != len(vector) {
 			continue
@@ -865,6 +884,150 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 		result = append(result, scored[i].item)
 	}
 	return result, nil
+}
+
+// bytesPerVectorFloat is the width of one stored vector component.
+const bytesPerVectorFloat = 4
+
+// isVectorGoType reports whether a model field is a vector column, which the
+// generator declares as a float32 slice, optionally behind a pointer because the
+// column is nullable.
+func isVectorGoType(t reflect.Type) bool {
+	return vectorSliceType(t) != nil
+}
+
+// vectorSliceType returns the slice type a vector field holds, or nil for any
+// other field. A pointer to a slice is unwrapped so both the nullable and the
+// required spelling are recognised.
+func vectorSliceType(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Float32 {
+		return t
+	}
+	return nil
+}
+
+// vectorComponents reads a vector field as float64 components.
+//
+// A field can arrive as JSON text, as a slice, or behind a pointer to either, and a
+// pointer is how the generator spells a nullable column. Anything else is not a vector.
+func vectorComponents(field reflect.Value) []float64 {
+	for field.Kind() == reflect.Ptr {
+		if field.IsNil() {
+			return nil
+		}
+		field = field.Elem()
+	}
+	switch {
+	case field.Kind() == reflect.String:
+		var parsed []float64
+		if err := json.Unmarshal([]byte(field.String()), &parsed); err != nil {
+			return nil
+		}
+		return parsed
+	case field.Kind() == reflect.Slice:
+		out := make([]float64, field.Len())
+		for i := range out {
+			out[i] = field.Index(i).Float()
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// setVectorField stores decoded components into a vector field, matching whether
+// the field holds the slice directly or behind a pointer.
+func setVectorField(field reflect.Value, values []float64) {
+	sliceType := vectorSliceType(field.Type())
+	if sliceType == nil {
+		return
+	}
+	slice := reflect.MakeSlice(sliceType, len(values), len(values))
+	for i, value := range values {
+		slice.Index(i).SetFloat(value)
+	}
+	if field.Kind() == reflect.Ptr {
+		ptr := reflect.New(sliceType)
+		ptr.Elem().Set(slice)
+		field.Set(ptr)
+		return
+	}
+	field.Set(slice)
+}
+
+// encodeVectorArg converts a vector field into the bytes the column stores.
+//
+// database/sql accepts only a fixed set of types, so a slice otherwise reaches the
+// driver as an error. Values that already arrived as stored form pass through.
+func encodeVectorArg(value interface{}) interface{} {
+	switch v := value.(type) {
+	case *[]float32:
+		if v == nil {
+			return nil
+		}
+		return encodeVectorFloats(floatsFrom32(*v))
+	case []float32:
+		return encodeVectorFloats(floatsFrom32(v))
+	case *[]float64:
+		if v == nil {
+			return nil
+		}
+		return encodeVectorFloats(*v)
+	case []float64:
+		return encodeVectorFloats(v)
+	default:
+		return value
+	}
+}
+
+func floatsFrom32(values []float32) []float64 {
+	out := make([]float64, len(values))
+	for i, value := range values {
+		out[i] = float64(value)
+	}
+	return out
+}
+
+// encodeVectorFloats writes float32 values little-endian, which is the order the
+// stored bytes are read back in.
+func encodeVectorFloats(values []float64) []byte {
+	out := make([]byte, len(values)*bytesPerVectorFloat)
+	for i, value := range values {
+		offset := i * bytesPerVectorFloat
+		bits := math.Float32bits(float32(value))
+		out[offset] = byte(bits)
+		out[offset+1] = byte(bits >> 8)
+		out[offset+2] = byte(bits >> 16)
+		out[offset+3] = byte(bits >> 24)
+	}
+	return out
+}
+
+// decodeVectorBytes reads a stored vector: float32 bytes, legacy JSON text, or
+// nothing at all.
+func decodeVectorBytes(raw []byte) ([]float64, bool) {
+	if len(raw) == 0 {
+		return nil, false
+	}
+	// JSON text is not a multiple of four bytes once encoded and starts with '[',
+	// so the two are told apart by length and first byte.
+	if raw[0] == '[' || len(raw)%bytesPerVectorFloat != 0 {
+		var parsed []float64
+		if err := json.Unmarshal(raw, &parsed); err != nil || len(parsed) == 0 {
+			return nil, false
+		}
+		return parsed, true
+	}
+	out := make([]float64, len(raw)/bytesPerVectorFloat)
+	for i := range out {
+		offset := i * bytesPerVectorFloat
+		bits := uint32(raw[offset]) | uint32(raw[offset+1])<<8 | uint32(raw[offset+2])<<16 | uint32(raw[offset+3])<<24
+		out[i] = float64(math.Float32frombits(bits))
+	}
+	return out, true
 }
 
 // findFieldByDbTag looks up a struct field by its "db" tag (case-insensitive).

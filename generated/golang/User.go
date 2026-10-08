@@ -12,6 +12,7 @@ type User struct {
 	Name *string `json:"name,omitempty" db:"name"`
 	IsActive bool `json:"isActive" db:"is_active"`
 	Score int `json:"score" db:"score"`
+	Embedding *[]float32 `json:"embedding,omitempty" db:"embedding"`
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 
 	// Relations
@@ -30,6 +31,7 @@ type UserWhereInput struct {
 	Name *StringFilter
 	IsActive *BoolFilter
 	Score *IntFilter
+	Embedding *StringFilter
 	CreatedAt *DateTimeFilter
 }
 
@@ -40,6 +42,7 @@ type UserOrderByInput struct {
 	Name *SortOrder
 	IsActive *SortOrder
 	Score *SortOrder
+	Embedding *SortOrder
 	CreatedAt *SortOrder
 }
 
@@ -49,6 +52,7 @@ type UserCreateInput struct {
 	Name *string
 	IsActive *bool
 	Score *int
+	Embedding *[]float32
 	CreatedAt *time.Time
 }
 
@@ -58,6 +62,7 @@ type UserUpdateInput struct {
 	Name *string
 	IsActive *bool
 	Score *int
+	Embedding *[]float32
 	CreatedAt *time.Time
 }
 

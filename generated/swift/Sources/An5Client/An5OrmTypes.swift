@@ -221,6 +221,7 @@ public enum An5Orm {
         public var name: StringFilter?
         public var isActive: BoolFilter?
         public var score: NumberFilter?
+        public var embedding: StringFilter?
         public var createdAt: DateFilter?
 
         /// Creates a filter with every column unset; assign the ones you want to match.
@@ -256,6 +257,7 @@ public enum An5Orm {
             if let name = name { filter["name"] = name.build() }
             if let isActive = isActive { filter["isActive"] = isActive.build() }
             if let score = score { filter["score"] = score.build() }
+            if let embedding = embedding { filter["embedding"] = embedding.build() }
             if let createdAt = createdAt { filter["createdAt"] = createdAt.build() }
             return filter
         }

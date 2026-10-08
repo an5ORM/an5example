@@ -159,6 +159,7 @@ namespace An5Orm
         public StringFilter Name { get; set; }
         public BoolFilter IsActive { get; set; }
         public IntFilter Score { get; set; }
+        public StringFilter Embedding { get; set; }
         public DateTimeFilter CreatedAt { get; set; }
     }
 
@@ -170,6 +171,7 @@ namespace An5Orm
         public string Name { get; set; } // "asc" or "desc"
         public string IsActive { get; set; } // "asc" or "desc"
         public string Score { get; set; } // "asc" or "desc"
+        public string Embedding { get; set; } // "asc" or "desc"
         public string CreatedAt { get; set; } // "asc" or "desc"
     }
 
@@ -180,6 +182,7 @@ namespace An5Orm
         public string Name { get; set; }
         public bool? IsActive { get; set; }
         public int? Score { get; set; }
+        public float[] Embedding { get; set; }
         public DateTime? CreatedAt { get; set; }
     }
 
@@ -190,6 +193,7 @@ namespace An5Orm
         public string Name { get; set; }
         public bool? IsActive { get; set; }
         public int? Score { get; set; }
+        public float[] Embedding { get; set; }
         public DateTime? CreatedAt { get; set; }
     }
 

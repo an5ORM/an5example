@@ -11,6 +11,7 @@ class User:
     name: Optional[str] = None
     is_active: Optional[bool] = None
     score: Optional[int] = None
+    embedding: Optional[List[float]] = None
     created_at: Optional[datetime] = None
     orders: List[Any] = field(default_factory=list)
 
@@ -24,6 +25,7 @@ class UserRow(_UserRequired, total=False):
     name: str
     is_active: bool
     score: int
+    embedding: List[float]
     created_at: datetime
     orders: List[Any]
 

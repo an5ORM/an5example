@@ -378,6 +378,7 @@ public final class An5OrmTypes {
     public StringFilter Name;
     public BoolFilter IsActive;
     public NumberFilter Score;
+    public StringFilter Embedding;
     public DateFilter CreatedAt;
 
     public UserWhere and(UserWhere... clauses) {
@@ -406,6 +407,7 @@ public final class An5OrmTypes {
       if (Name != null) filter.put("name", Name.toMap());
       if (IsActive != null) filter.put("isActive", IsActive.toMap());
       if (Score != null) filter.put("score", Score.toMap());
+      if (Embedding != null) filter.put("embedding", Embedding.toMap());
       if (CreatedAt != null) filter.put("createdAt", CreatedAt.toMap());
       return filter;
     }

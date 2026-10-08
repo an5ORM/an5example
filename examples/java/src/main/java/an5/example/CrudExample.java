@@ -74,17 +74,37 @@ public final class CrudExample {
         // ── Create ─────────────────────────────────────────────────────────────
         User alice =
             db.getUser()
-                .create(new User().withEmail("alice@example.com").withName("Alice").withScore(123));
+                .create(new User().withEmail("alice@example.com").withName("Alice").withScore(123)
+                    .withEmbedding(new double[] {1.0, 0.0, 0.0}));
         System.out.println("created user " + alice.getId());
         check(alice.getId() != null, "create did not return the generated primary key");
 
         User bob =
             db.getUser()
-                .create(new User().withEmail("bob@example.com").withName("Bob").withScore(7));
+                .create(new User().withEmail("bob@example.com").withName("Bob").withScore(7)
+                    .withEmbedding(new double[] {0.0, 1.0, 0.0}));
         db.getOrder()
             .create(new Order().withUserId(alice.getId()).withTotal(250).withStatus("open"));
         db.getOrder()
             .create(new Order().withUserId(alice.getId()).withTotal(75).withStatus("paid"));
+
+        // ── Vector search ──────────────────────────────────────────────────────
+        // A `VECTOR(n)` column is stored as float32 bytes and read back through
+        // `An5Values.asVector`; a null here means the generated converter and the
+        // stored bytes had drifted apart.
+        List<User> aliceRows =
+            db.getUser().findMany(new An5Query().where(filter("email", op("contains", "alice"))));
+        double[] readBack = aliceRows.get(0).getEmbedding();
+        check(readBack != null && readBack.length == 3,
+            "the stored vector reads back as 3 numbers, got "
+                + (readBack == null ? "null" : readBack.length));
+        check(Math.abs(readBack[0] - 1.0) < 1e-6, "wrong first component: " + readBack[0]);
+
+        List<User> ranked = db.getUser().vectorSearch(new double[] {1.0, 0.0, 0.0}, 2, null, "embedding", "cosine");
+        System.out.println("vector search returned " + ranked.size() + " rows");
+        check(ranked.size() == 2, "both users carry an embedding, got " + ranked.size());
+        check(alice.getId().equals(ranked.get(0).getId()),
+            "the user whose embedding matches the query ranks first");
 
         // ── Read: typed string filter ──────────────────────────────────────────
         List<User> matching =
@@ -215,6 +235,7 @@ public final class CrudExample {
             + "name TEXT NULL, "
             + "isActive INTEGER NOT NULL DEFAULT 1, "
             + "score INTEGER NOT NULL DEFAULT 0, "
+            + "embedding BLOB NULL, "
             + "createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))");
     db.executeRaw(
         "CREATE TABLE IF NOT EXISTS orders ("

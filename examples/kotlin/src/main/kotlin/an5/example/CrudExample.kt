@@ -42,16 +42,34 @@ fun main() {
 
             // ── Create ─────────────────────────────────────────────────────────
             val alice = db.user.create(
-                User(email = "alice@example.com", name = "Alice", score = 123)
+                User(email = "alice@example.com", name = "Alice", score = 123, embedding = doubleArrayOf(1.0, 0.0, 0.0))
             )
             val aliceId = checkNotNull(alice.id) { "create did not return the generated primary key" }
             println("created user $aliceId")
 
             val bob = db.user.create(
-                User(email = "bob@example.com", name = "Bob", score = 7)
+                User(email = "bob@example.com", name = "Bob", score = 7, embedding = doubleArrayOf(0.0, 1.0, 0.0))
             )
             db.order.create(Order(userId = aliceId, total = 250, status = "open"))
             db.order.create(Order(userId = aliceId, total = 75, status = "paid"))
+
+            // ── Vector search ─────────────────────────────────────────────────────
+            // A `VECTOR(n)` column is stored as float32 bytes and read back through
+            // `vectorOrNull`; an empty result here means the generated model and the
+            // stored bytes had drifted apart.
+            val aliceRows = db.user.findMany(
+                An5Orm.UserWhere(email = An5Orm.StringFilter.has("alice")).build()
+            )
+            val readBack = aliceRows.firstOrNull()?.embedding
+            check(readBack != null && readBack.size == 3) {
+                "the stored vector reads back as 3 numbers, got ${readBack?.size}"
+            }
+            check(kotlin.math.abs(readBack!![0] - 1.0) < 1e-6) { "wrong first component: ${readBack[0]}" }
+
+            val ranked = db.user.vectorSearch(doubleArrayOf(1.0, 0.0, 0.0), take = 2, vectorField = "embedding")
+            println("vector search returned ${ranked.size} rows")
+            check(ranked.size == 2) { "both users carry an embedding, got ${ranked.size}" }
+            check(ranked.first().id == aliceId) { "the user whose embedding matches the query ranks first" }
 
             // ── Read: typed string filter ──────────────────────────────────────
             val matching = db.user.findMany(
@@ -170,6 +188,7 @@ private fun createTables(db: An5Db) {
           name TEXT NULL,
           isActive INTEGER NOT NULL DEFAULT 1,
           score INTEGER NOT NULL DEFAULT 0,
+          embedding BLOB NULL,
           createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
         )
         """.trimIndent()

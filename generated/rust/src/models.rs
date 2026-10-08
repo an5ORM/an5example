@@ -158,6 +158,9 @@ pub struct User {
     /// Accumulated score used in aggregation examples
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<i32>,
+    /// Embedding vector for the semantic-search example
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<Vec<f32>>,
     /// Timestamp when the user profile was created
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
@@ -185,6 +188,8 @@ pub struct UserWhereInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<IntFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<StringFilter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTimeFilter>,
 }
 
@@ -202,6 +207,8 @@ pub struct UserOrderByInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<SortOrder>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<SortOrder>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<SortOrder>,
 }
 
@@ -215,6 +222,8 @@ pub struct UserCreateInput {
     pub is_active: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<Vec<f32>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
 }
@@ -230,6 +239,8 @@ pub struct UserUpdateInput {
     pub is_active: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<Vec<f32>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
 }

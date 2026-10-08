@@ -29,6 +29,7 @@ public enum An5Metadata {
             ["name": "name", "type": "string", "sql": "VARCHAR(255)", "isOptional": true, "hasDefault": false, "isId": false, "description": "Display name of the user"],
             ["name": "isActive", "type": "boolean", "sql": "BOOLEAN", "isOptional": false, "hasDefault": true, "isId": false, "description": "Whether the user account is active"],
             ["name": "score", "type": "number", "sql": "INTEGER", "isOptional": false, "hasDefault": true, "isId": false, "description": "Accumulated score used in aggregation examples"],
+            ["name": "embedding", "type": "number[] | string", "sql": "VECTOR(3)", "isOptional": true, "hasDefault": false, "isId": false, "description": "Embedding vector for the semantic-search example"],
             ["name": "createdAt", "type": "Date", "sql": "DATETIME", "isOptional": false, "hasDefault": true, "isId": false, "description": "Timestamp when the user profile was created"],
         ],
     ]

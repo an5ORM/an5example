@@ -139,6 +139,7 @@ class UserWhereInput:
     name: Optional[StringFilter] = None
     is_active: Optional[BoolFilter] = None
     score: Optional[IntFilter] = None
+    embedding: Optional[StringFilter] = None
     created_at: Optional[DateTimeFilter] = None
 
 @dataclass
@@ -149,6 +150,7 @@ class UserOrderByInput:
     name: Optional[str] = None
     is_active: Optional[str] = None
     score: Optional[str] = None
+    embedding: Optional[str] = None
     created_at: Optional[str] = None
 
 @dataclass
@@ -158,6 +160,7 @@ class UserCreateInput:
     name: Optional[str] = None
     is_active: Optional[bool] = None
     score: Optional[int] = None
+    embedding: Optional[List[float]] = None
     created_at: Optional[datetime] = None
 
 @dataclass
@@ -167,6 +170,7 @@ class UserUpdateInput:
     name: Optional[str] = None
     is_active: Optional[bool] = None
     score: Optional[int] = None
+    embedding: Optional[List[float]] = None
     created_at: Optional[datetime] = None
 
 @dataclass

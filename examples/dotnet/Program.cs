@@ -43,6 +43,12 @@ internal static class Program
                     name      NVARCHAR(255) NULL,
                     isActive  BIT NOT NULL DEFAULT 1,
                     score     INT NOT NULL DEFAULT 0,
+                    -- The schema declares VECTOR(3) and the database has that type, so
+                    -- this is a real vector column ranked by VECTOR_DISTANCE in the
+                    -- database. That type arrived in SQL Server 2025; on 2022 the DDL has
+                    -- to say NVARCHAR(MAX) and hold the same JSON, which the adapter
+                    -- still ranks natively by casting.
+                    embedding VECTOR(3) NULL,
                     createdAt DATETIME2 NOT NULL DEFAULT SYSDATETIME()
                 );
                 CREATE TABLE dbo.orders (
@@ -94,6 +100,7 @@ internal static class Program
                 Name = "Alice",
                 Score = 123,
                 IsActive = true,
+                Embedding = new float[] { 1f, 0f, 0f },
                 CreatedAt = DateTime.UtcNow,
                 Orders = null!,
             };
@@ -108,6 +115,36 @@ internal static class Program
                 CreatedAt = DateTime.UtcNow,
             };
             db.Order.Create(order);
+
+            // ── Vector search ──────────────────────────────────────────────────────
+            // The column is a real VECTOR(3). Writing sends a float[] that the engine
+            // binds as the JSON array SQL Server expects, and reading brings it back as
+            // float[], so a null here means one of those two ends drifted.
+            db.User.Create(new User
+            {
+                Id = "u2",
+                Email = "bob@example.com",
+                Name = "Bob",
+                Score = 7,
+                IsActive = true,
+                Embedding = new float[] { 0f, 1f, 0f },
+                CreatedAt = DateTime.UtcNow,
+                Orders = null!,
+            });
+
+            var vectorRows = db.User.FindMany("Id = @id", new Dictionary<string, object> { ["id"] = "u1" });
+            var readBack = vectorRows[0].Embedding;
+            if (readBack == null || readBack.Length != 3 || Math.Abs(readBack[0] - 1f) > 1e-6)
+            {
+                throw new InvalidOperationException("the stored vector reads back as [1, 0, 0], got "
+                    + (readBack == null ? "null" : string.Join(", ", readBack)));
+            }
+            Console.WriteLine($"vector read back: [{string.Join(", ", readBack)}]");
+
+            var ranked = db.User.VectorSearch(new List<double> { 1.0, 0.0, 0.0 }, 2, null, null, "embedding", "cosine");
+            Console.WriteLine($"vector search returned {ranked.Count} rows");
+            if (ranked.Count != 2) throw new InvalidOperationException($"both users carry an embedding, got {ranked.Count}");
+            if (ranked[0].Id != "u1") throw new InvalidOperationException("the matching user must rank first");
 
             var found = db.User.FindMany("Email = @email", new Dictionary<string, object> { ["email"] = "alice@example.com" });
             Console.WriteLine($"found {found.Count} user(s) matching alice");

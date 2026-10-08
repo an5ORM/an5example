@@ -11,7 +11,7 @@
 use an5_client::{
     An5Client, BoolFilter, IntFilter, OrderCreateInput, OrderWhereInput, SortOrder, StringFilter,
     UserCreateInput, UserFindManyArgs, UserFindUniqueArgs, UserOrderByInput, UserUpdateArgs,
-    UserUpdateInput, UserWhereInput,
+    UserUpdateInput, UserVectorSearchArgs, UserWhereInput,
 };
 use serde_json::json;
 
@@ -30,6 +30,7 @@ async fn create_tables(db: &An5Client) {
                  name       TEXT NULL,
                  is_active  INTEGER NOT NULL DEFAULT 1,
                  score      INTEGER NOT NULL DEFAULT 0,
+                 embedding  BLOB NULL,
                  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                )"#,
             &[],
@@ -75,6 +76,7 @@ async fn main() {
             name: Some("Alice".to_string()),
             is_active: Some(true),
             score: Some(123),
+            embedding: Some(vec![1.0, 0.0, 0.0]),
             created_at: None,
         })
         .await
@@ -87,6 +89,7 @@ async fn main() {
             name: Some("Bob".to_string()),
             is_active: Some(true),
             score: Some(7),
+            embedding: Some(vec![0.0, 1.0, 0.0]),
             created_at: None,
         })
         .await
@@ -257,6 +260,27 @@ async fn main() {
         .expect("bob exists");
     assert_eq!(bob_after.name.as_deref(), Some("Bobby"));
     assert_eq!(bob_after.score, Some(50));
+
+    // ── Vector search ────────────────────────────────────────────────────────
+    // The generated client returns `(User, f64)` tuples, so the distance is typed
+    // rather than hidden in a `JSONObject`.
+    let ranked = users
+        .vector_search(&UserVectorSearchArgs {
+            vector: vec![1.0, 0.0, 0.0],
+            take: Some(2),
+            where_: None,
+            vector_field: "embedding".to_string(),
+            distance_metric: "cosine".to_string(),
+        })
+        .await
+        .expect("vector search");
+    assert_eq!(ranked.len(), 2, "both users carry an embedding");
+    assert_eq!(
+        ranked[0].0.id, alice.id,
+        "the user whose embedding matches the query ranks first"
+    );
+    assert!(ranked[0].1 < 1e-6, "an identical vector has distance 0");
+    println!("vector search: {:?} at distance {}", ranked[0].0.name, ranked[0].1);
 
     // ── Delete ───────────────────────────────────────────────────────────────
     let deleted_orders = orders

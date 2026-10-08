@@ -32,6 +32,7 @@ object An5Metadata {
             field("name", "string", "VARCHAR(255)", true, false, false, "Display name of the user"),
             field("isActive", "boolean", "BOOLEAN", false, true, false, "Whether the user account is active"),
             field("score", "number", "INTEGER", false, true, false, "Accumulated score used in aggregation examples"),
+            field("embedding", "number[] | string", "VECTOR(3)", true, false, false, "Embedding vector for the semantic-search example"),
             field("createdAt", "Date", "DATETIME", false, true, false, "Timestamp when the user profile was created")
         ),
     )

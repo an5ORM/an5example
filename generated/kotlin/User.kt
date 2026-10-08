@@ -9,6 +9,7 @@ import an5.adapters.Row
 import an5.adapters.stringOrNull
 import an5.adapters.boolOrNull
 import an5.adapters.intOrNull
+import an5.adapters.vectorOrNull
 import an5.adapters.localDateTimeOrNull
 import an5.adapters.related
 
@@ -25,6 +26,7 @@ data class User(
     val name: String? = null,
     val isActive: Boolean? = null,
     val score: Int? = null,
+    val embedding: DoubleArray? = null,
     val createdAt: LocalDateTime? = null
 ) {
 
@@ -39,6 +41,7 @@ data class User(
         this["name"] = this@User.name
         this["isActive"] = this@User.isActive
         this["score"] = this@User.score
+        this["embedding"] = this@User.embedding
         this["createdAt"] = this@User.createdAt
     }
 
@@ -56,6 +59,7 @@ data class User(
             name = row.stringOrNull("name"),
             isActive = row.boolOrNull("isActive"),
             score = row.intOrNull("score"),
+            embedding = row.vectorOrNull("embedding"),
             createdAt = row.localDateTimeOrNull("createdAt"),
             orders = row.related("orders").map { Order.fromRow(it) },
         )
