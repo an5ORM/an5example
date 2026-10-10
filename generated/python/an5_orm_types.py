@@ -1,11 +1,13 @@
 # This file is auto-generated. Do not edit directly.
 """
-AN5 ORM typed filter/args dataclasses for type-safe queries.
+AN5 ORM typed filter/args dataclasses.
 
-Usage example::
+These describe the filter shapes the Python client accepts. The adapter reads plain
+dicts, not these dataclasses, and it quotes every key verbatim, so use the schema
+field names (`createdAt`, not `created_at`):
 
-    db.user.find_many(where=UserWhereInput(name=StringFilter(contains="John")),
-                      order_by=UserOrderByInput(created_at="desc"),
+    db.user.find_many(where={"name": {"contains": "John"}},
+                      order_by={"createdAt": "desc"},
                       take=10)
 """
 from __future__ import annotations

@@ -22,9 +22,12 @@ if TYPE_CHECKING:
 class An5Client:
     """AN5 Python ORM Client - type-safe database access.
 
+    Query keys are schema field names, used verbatim: the SQL builder quotes a key
+    as-is, so `createdAt` reaches the database and `created_at` does not.
+
     Usage:
         db = An5Client()
-        users = db.user.find_many(where={"name": {"contains": "John"}}, order_by={"created_at": "asc"}, take=10)
+        users = db.user.find_many(where={"name": {"contains": "John"}}, order_by={"createdAt": "asc"}, take=10)
         user  = db.user.find_first(where={"id": "abc"})
         new   = db.user.create(data={"name": "Alice", "email": "alice@example.com"})
     """

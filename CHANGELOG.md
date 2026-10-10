@@ -75,6 +75,7 @@
   check was passing without the dependency the generated source actually requires.
 - The generated Go client recognises the bare `"sqlite"` connection string and strips the
   SQL Server `dbo.` prefix under SQLite, matching the ORM.
+- Regenerated the Java and Python example clients from the an5Orm generator, so the Java example carries the corrected `An5DbContext` javadoc and the Python example's client docstrings show query keys the SQL builder resolves (`createdAt`, not `created_at`) and no longer advertise `UserWhereInput(...)`, which the adapter does not accept.
 
 ## [0.1.1] - 2026-08-19
 
