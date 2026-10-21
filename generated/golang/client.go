@@ -796,37 +796,39 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 	vecStr := string(vecBytes)
 
 	// 1. Primary path: dialect-aware native SQL vector query
-	var sqlQuery string
-	queryArgs := append([]interface{}{vecStr}, whereQueryArgs...)
-	if c.Dialect == DialectPostgres {
-		op := "<=>"
-		if strings.EqualFold(distanceMetric, "euclidean") { op = "<->" }
-		if strings.EqualFold(distanceMetric, "dot") { op = "<#>" }
-		vcol := c.quoteName(vectorField)
-		sqlQuery = fmt.Sprintf("SELECT *, (%s %s $1::vector) AS distance FROM %s", vcol, op, c.quoteTable())
-		if whereCl != "" {
-			sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL AND (%s)", vcol, whereCl)
+	if c.Dialect != DialectSqlite {
+		var sqlQuery string
+		queryArgs := append([]interface{}{vecStr}, whereQueryArgs...)
+		if c.Dialect == DialectPostgres {
+			op := "<=>"
+			if strings.EqualFold(distanceMetric, "euclidean") { op = "<->" }
+			if strings.EqualFold(distanceMetric, "dot") { op = "<#>" }
+			vcol := c.quoteName(vectorField)
+			sqlQuery = fmt.Sprintf("SELECT *, (%s %s $1::vector) AS distance FROM %s", vcol, op, c.quoteTable())
+			if whereCl != "" {
+				sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL AND (%s)", vcol, whereCl)
+			} else {
+				sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL", vcol)
+			}
+			sqlQuery += fmt.Sprintf(" ORDER BY distance ASC LIMIT %d", take)
 		} else {
-			sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL", vcol)
+			vcol := c.quoteName(vectorField)
+			sqlQuery = fmt.Sprintf(
+				"SELECT TOP (%d) *, VECTOR_DISTANCE('%s', CAST(%s AS VECTOR(%d, float32)), CAST(? AS VECTOR(%d, float32))) AS distance FROM %s WITH (NOLOCK)",
+				take, distanceMetric, vcol, dim, dim, c.quoteTable(),
+			)
+			if whereCl != "" {
+				sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL AND (%s)", vcol, whereCl)
+			} else {
+				sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL", vcol)
+			}
+			sqlQuery += " ORDER BY distance ASC"
 		}
-		sqlQuery += fmt.Sprintf(" ORDER BY distance ASC LIMIT %d", take)
-	} else {
-		vcol := c.quoteName(vectorField)
-		sqlQuery = fmt.Sprintf(
-			"SELECT TOP (%d) *, VECTOR_DISTANCE('%s', CAST(%s AS VECTOR(%d, float32)), CAST(? AS VECTOR(%d, float32))) AS distance FROM %s WITH (NOLOCK)",
-			take, distanceMetric, vcol, dim, dim, c.quoteTable(),
-		)
-		if whereCl != "" {
-			sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL AND (%s)", vcol, whereCl)
-		} else {
-			sqlQuery += fmt.Sprintf(" WHERE %s IS NOT NULL", vcol)
-		}
-		sqlQuery += " ORDER BY distance ASC"
-	}
 
-	nativeRows, nativeErr := c.queryAndScan(ctx, sqlQuery, queryArgs...)
-	if nativeErr == nil {
-		return nativeRows, nil
+		nativeRows, nativeErr := c.queryAndScan(ctx, sqlQuery, queryArgs...)
+		if nativeErr == nil {
+			return nativeRows, nil
+		}
 	}
 
 	// 2. Fallback: in-memory similarity

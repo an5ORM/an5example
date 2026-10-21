@@ -76,6 +76,7 @@
 - The generated Go client recognises the bare `"sqlite"` connection string and strips the
   SQL Server `dbo.` prefix under SQLite, matching the ORM.
 - Regenerated the Java and Python example clients from the an5Orm generator, so the Java example carries the corrected `An5DbContext` javadoc and the Python example's client docstrings show query keys the SQL builder resolves (`createdAt`, not `created_at`) and no longer advertise `UserWhereInput(...)`, which the adapter does not accept.
+- Regenerated `generated/dotnet/An5DbContext.cs` and `generated/golang/client.go` from the updated `an5Orm` 1.3.2 generator so `.NET` `VectorSearch` decodes `float[]` vector properties across `cosine`, `euclidean` and `dot` metrics and Go `VectorSearch` skips the SQL Server `VECTOR_DISTANCE` query on SQLite.
 
 ## [0.1.1] - 2026-08-19
 
