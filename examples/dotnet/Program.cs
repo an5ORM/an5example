@@ -5,6 +5,7 @@
 //
 // Run: dotnet run --project examples/dotnet
 using System;
+using An5Example;
 using An5Example.Providers;
 
 internal static class Program
@@ -41,6 +42,17 @@ internal static class Program
         catch (Exception ex)
         {
             Console.WriteLine($"[.NET/MSSQL] Exception: {ex.Message}");
+        }
+
+        // 4. Full Query API Showcase
+        try
+        {
+            QueriesExample.Run();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[.NET/Queries] Exception: {ex.Message}");
+            return 1;
         }
 
         Console.WriteLine("================ All .NET Provider Examples Completed ================");

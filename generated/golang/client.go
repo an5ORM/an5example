@@ -600,7 +600,7 @@ func (c *TableClient[T]) UpdateMany(ctx context.Context, whereArgs interface{}, 
 		sets = append(sets, c.quoteName(col)+" = "+c.ph(len(execArgs)))
 	}
 
-	clause, _, _, _, _, whereQueryArgs := c.parseArgs(whereArgs)
+	clause, _, _, _, _, whereQueryArgs := c.parseArgsWithOffset(whereArgs, len(execArgs)+1)
 	execArgs = append(execArgs, whereQueryArgs...)
 	query := fmt.Sprintf("UPDATE %s SET %s", c.quoteTable(), strings.Join(sets, ", "))
 	if clause != "" {
@@ -804,6 +804,10 @@ func (c *TableClient[T]) GroupBy(ctx context.Context, args GroupByArgs) ([]map[s
 // parseArgs is the generic where/orderBy/take/skip extractor.
 // It uses reflection to read WhereClause, OrderBy, Take, Skip, Select from any args struct.
 func (c *TableClient[T]) parseArgs(args interface{}) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}) {
+	return c.parseArgsWithOffset(args, 1)
+}
+
+func (c *TableClient[T]) parseArgsWithOffset(args interface{}, offset int) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}) {
 	if args == nil {
 		return
 	}
@@ -820,10 +824,18 @@ func (c *TableClient[T]) parseArgs(args interface{}) (whereClause string, orderB
 
 	// Where
 	whereField := v.FieldByName("Where")
-	if whereField.IsValid() && !whereField.IsNil() {
-		// where is a pointer to a model-specific WhereInput struct
-		// Delegate to buildWhereFromStruct
-		wc, wa := c.buildWhereFromStruct(whereField.Elem(), 1)
+	if whereField.IsValid() {
+		if !whereField.IsNil() {
+			elem := whereField
+			if elem.Kind() == reflect.Ptr {
+				elem = elem.Elem()
+			}
+			wc, wa := c.buildWhereFromStruct(elem, offset)
+			whereClause = wc
+			queryArgs = wa
+		}
+	} else {
+		wc, wa := c.buildWhereFromStruct(v, offset)
 		whereClause = wc
 		queryArgs = wa
 	}

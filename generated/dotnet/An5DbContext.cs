@@ -431,6 +431,14 @@ namespace An5Orm
             return FindFirst("Id = @id", new Dictionary<string, object> { { "id", id } });
         }
 
+        private static bool IsScalarColumn(PropertyInfo prop)
+        {
+            var t = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+            if (t.IsPrimitive || t.IsEnum || t.IsValueType) return true;
+            if (t == typeof(string) || t == typeof(byte[]) || t == typeof(float[]) || t == typeof(double[])) return true;
+            return false;
+        }
+
         public T Create(T entity)
         {
             var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -442,6 +450,7 @@ namespace An5Orm
 
             foreach (var prop in properties)
             {
+                if (!IsScalarColumn(prop)) continue;
                 var val = prop.GetValue(entity);
                 if (val != null)
                 {
@@ -483,6 +492,7 @@ namespace An5Orm
 
             foreach (var prop in properties)
             {
+                if (!IsScalarColumn(prop)) continue;
                 var val = prop.GetValue(entity);
                 if (prop.Name.Equals("Id", StringComparison.OrdinalIgnoreCase))
                 {
