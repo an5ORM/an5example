@@ -5,9 +5,9 @@ from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 from an5_adapter import An5Adapter, AdapterTableClient, create_an5_adapter, set_adapter_metadata
 
 try:
-    from .an5_metadata import MODEL_TO_TABLE, MODEL_FIELDS
+    from .an5_metadata import MODEL_TO_TABLE, MODEL_FIELDS, RELATION_MAP
 except ImportError:
-    from an5_metadata import MODEL_TO_TABLE, MODEL_FIELDS
+    from an5_metadata import MODEL_TO_TABLE, MODEL_FIELDS, RELATION_MAP
 
 if TYPE_CHECKING:
     try:
@@ -35,7 +35,7 @@ class An5Client:
         conn_str = (connection_string or 
                     os.getenv("DATABASE_URL") or 
                     "Server=localhost;Database=master;Trusted_Connection=True;TrustServerCertificate=True;")
-        set_adapter_metadata({"model_to_table": MODEL_TO_TABLE, "model_fields": MODEL_FIELDS})
+        set_adapter_metadata({"model_to_table": MODEL_TO_TABLE, "model_fields": MODEL_FIELDS, "relation_map": RELATION_MAP})
         self.adapter: An5Adapter = create_an5_adapter(conn_str)
 
         client = AdapterTableClient(self.adapter, "Order")
