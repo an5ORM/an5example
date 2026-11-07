@@ -17,15 +17,15 @@ class User:
 
 class _UserRequired(TypedDict):
     """Required keys of a User row."""
+    id: str
     email: str
+    name: Optional[str]
+    is_active: bool
+    score: int
+    embedding: Optional[List[float]]
+    created_at: datetime
 
 class UserRow(_UserRequired, total=False):
     """Row shape returned for User queries."""
-    id: str
-    name: str
-    is_active: bool
-    score: int
-    embedding: List[float]
-    created_at: datetime
     orders: List[Any]
 

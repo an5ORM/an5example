@@ -15,13 +15,13 @@ class Order:
 
 class _OrderRequired(TypedDict):
     """Required keys of a Order row."""
+    id: str
     user_id: str
+    total: int
+    status: Optional[str]
+    created_at: datetime
 
 class OrderRow(_OrderRequired, total=False):
     """Row shape returned for Order queries."""
-    id: str
-    total: int
-    status: str
-    created_at: datetime
     user: Any
 

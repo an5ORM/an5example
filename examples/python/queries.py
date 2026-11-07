@@ -143,7 +143,8 @@ def main():
     domain_users = db.user.find_many(
         where={"email": {"startsWith": "d", "endsWith": "@example.com"}}
     )
-    print(f"  ✓ startsWith('d') & endsWith('@example.com'): found {', '.join(u['name'] for u in domain_users)}")
+    names_str = ", ".join(u["name"] or "" for u in domain_users)
+    print(f"  ✓ startsWith('d') & endsWith('@example.com'): found {names_str}")
 
     # Range comparators: gte, lte
     high_scorers = db.user.find_many(
@@ -261,7 +262,8 @@ def main():
     users_with_big_orders = db.user.find_many(
         where={"orders": {"some": {"total": {"gte": 400}}}},
     )
-    print(f"  ✓ Relation filter (orders.some.total >= 400): found {', '.join(u['name'] for u in users_with_big_orders)}\n")
+    big_user_names = ", ".join(u["name"] or "" for u in users_with_big_orders)
+    print(f"  ✓ Relation filter (orders.some.total >= 400): found {big_user_names}\n")
 
     # ───────────────────────────────────────────────────────────────────────────
     # 7. MUTATIONS: update, Field Math, upsert, and delete
@@ -273,6 +275,7 @@ def main():
         where={"id": alice["id"]},
         data={"score": {"increment": 25}},
     )
+    assert updated_alice is not None
     print(f"  ✓ Atomic field increment: Alice score 100 -> {updated_alice['score']}")
     assert updated_alice["score"] == 125, f"Expected 125, got {updated_alice['score']}"
 
@@ -348,6 +351,7 @@ def main():
 
     db.transaction(txn_success)
     alice_after_tx = db.user.find_unique(where={"id": alice["id"]})
+    assert alice_after_tx is not None
     print(f"  ✓ Transaction committed: Alice new score={alice_after_tx['score']}")
     assert alice_after_tx["score"] == 200
 
@@ -362,6 +366,7 @@ def main():
         print(f"  ✓ Transaction intercepted failure: \"{ex}\" -> rolling back!")
 
     alice_after_rollback = db.user.find_unique(where={"id": alice["id"]})
+    assert alice_after_rollback is not None
     print(f"  ✓ Verified Rollback: Alice score remained {alice_after_rollback['score']} (not 9999)")
     assert alice_after_rollback["score"] == 200
     print()
