@@ -22,7 +22,22 @@
     "test:example:rust": "node test/rust-example-build.js --run-only",
     "test:java": "node test/java-example-build.js",
     "test:kotlin": "node test/kotlin-example-build.js",
-    "test:swift": "node test/swift-example-build.js"
+    "test:swift": "node test/swift-example-build.js",
+    "example:ts:sqlite": "node dist/examples/typescript/sqlite/crud.js",
+    "example:ts:postgres": "node dist/examples/typescript/postgres/crud.js",
+    "example:ts:mysql": "node dist/examples/typescript/mysql/crud.js",
+    "example:ts:mssql": "node dist/examples/typescript/mssql/crud.js",
+    "example:ts:googlesheets": "node dist/examples/typescript/googlesheets/crud.js",
+    "example:ts:nbase": "node dist/examples/typescript/nbase/crud.js",
+    "example:ts:providers": "node dist/examples/typescript/sqlite/crud.js && node dist/examples/typescript/postgres/crud.js && node dist/examples/typescript/mysql/crud.js && node dist/examples/typescript/mssql/crud.js && node dist/examples/typescript/googlesheets/crud.js && node dist/examples/typescript/nbase/crud.js",
+    "example:py:sqlite": "python3 examples/python/sqlite/crud.py",
+    "example:py:postgres": "python3 examples/python/postgres/crud.py",
+    "example:py:mssql": "python3 examples/python/mssql/crud.py",
+    "example:py:providers": "python3 examples/python/sqlite/crud.py && python3 examples/python/postgres/crud.py && python3 examples/python/mssql/crud.py",
+    "example:go:sqlite": "go -C examples/golang/sqlite run .",
+    "example:go:postgres": "go -C examples/golang/postgres run .",
+    "example:go:mssql": "go -C examples/golang/mssql run .",
+    "example:go:providers": "go -C examples/golang/sqlite run . && go -C examples/golang/postgres run . && go -C examples/golang/mssql run ."
   },
   "devDependencies": {
     "@an5/adapters": "file:../an5Adapters",
