@@ -177,6 +177,54 @@ func (c *TableClient[T]) ph(n int) string {
 	return "?"
 }
 
+// ViewClient provides read-only access to a database view.
+type ViewClient[T any] struct {
+	DB       *sql.DB
+	Dialect  Dialect
+	ViewName string
+	table    *TableClient[T]
+}
+
+// NewViewClient creates a typed read-only client for a view.
+func NewViewClient[T any](db *sql.DB, viewName string, dialect Dialect) *ViewClient[T] {
+	return &ViewClient[T]{
+		DB:       db,
+		Dialect:  dialect,
+		ViewName: viewName,
+		table:    NewTableClient[T](db, viewName, dialect),
+	}
+}
+
+// FindMany queries the view with ORM-style args.
+func (c *ViewClient[T]) FindMany(ctx context.Context, args interface{}) ([]T, error) {
+	return c.table.FindMany(ctx, args)
+}
+
+// FindFirst returns the first matching row of the view.
+func (c *ViewClient[T]) FindFirst(ctx context.Context, args interface{}) (*T, error) {
+	return c.table.FindFirst(ctx, args)
+}
+
+// FindUnique returns one row of the view by primary key.
+func (c *ViewClient[T]) FindUnique(ctx context.Context, args interface{}) (*T, error) {
+	return c.table.FindUnique(ctx, args)
+}
+
+// Count returns how many rows of the view match.
+func (c *ViewClient[T]) Count(ctx context.Context, args interface{}) (int64, error) {
+	return c.table.Count(ctx, args)
+}
+
+// QueryRaw runs a raw SELECT against the view.
+func (c *ViewClient[T]) QueryRaw(ctx context.Context, query string, args ...interface{}) ([]T, error) {
+	return c.table.QueryRaw(ctx, query, args...)
+}
+
+// VectorSearch searches a vector column of the view.
+func (c *ViewClient[T]) VectorSearch(ctx context.Context, vector []float64, opts ...VectorSearchOptions) ([]T, error) {
+	return c.table.VectorSearch(ctx, vector, opts...)
+}
+
 // queryAndScan executes a raw SELECT and scans results into []T via db struct tags.
 func (c *TableClient[T]) queryAndScan(ctx context.Context, query string, args ...interface{}) ([]T, error) {
 	rows, err := c.DB.QueryContext(ctx, query, args...)

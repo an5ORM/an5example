@@ -33,3 +33,19 @@ export interface TableClient<T, WhereInput = any, _Select = any, Include = any, 
   groupBy(args: GroupByArgs): Promise<any[]>;
   upsert(args: UpsertArgs): Promise<T>;
 }
+
+/**
+ * A read-only client for a view block.
+ *
+ * The same query surface as TableClient without any write method, matching the
+ * runtime ViewClient in @an5/adapters.
+ */
+export interface ViewClient<T, WhereInput = any, _Select = any, Include = any, FindManyArgs = any, FindFirstArgs = any, FindUniqueArgs = any, AggregateArgs = any, GroupByArgs = any> {
+  findMany(args?: FindManyArgs): Promise<T[]>;
+  vectorSearch(args: { vector: number[]; take?: number; where?: WhereInput; include?: Include; vectorField?: string; distanceMetric?: 'cosine' | 'euclidean' | 'dot'; }): Promise<(T & { distance: number })[]>;
+  findFirst(args?: FindFirstArgs): Promise<T | null>;
+  findUnique(args?: FindUniqueArgs): Promise<T | null>;
+  count(args?: { where?: WhereInput; }): Promise<number>;
+  aggregate(args: AggregateArgs): Promise<any>;
+  groupBy(args: GroupByArgs): Promise<any[]>;
+}

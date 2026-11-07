@@ -91,6 +91,54 @@ public struct ModelClient<T> {
     }
 }
 
+/// A read-only, typed client for one view.
+///
+/// The name avoids the runtime's own `ViewClient`, which is wrapped here: the runtime
+/// returns `Row` values and this maps them to the generated model. There are no write
+/// methods, so writing through a view does not compile.
+public struct ViewModelClient<T> {
+
+    private let client: ViewClient
+    private let read: (Row) -> T
+
+    init(view: ViewClient, read: @escaping (Row) -> T) {
+        self.client = view
+        self.read = read
+    }
+
+    /// The view this client reads.
+    public var view: String { client.view }
+
+    public func findMany() throws -> [T] { try client.findMany().map { read($0) } }
+
+    public func findMany(_ query: Query) throws -> [T] { try client.findMany(query).map { read($0) } }
+
+    public func findMany(filter: Where) throws -> [T] { try client.findMany(filter: filter).map { read($0) } }
+
+    public func findFirst(filter: Where) throws -> T? { try client.findFirst(filter: filter).map { read($0) } }
+
+    public func findUnique(filter: Where) throws -> T? { try client.findUnique(filter: filter).map { read($0) } }
+
+    public func count(_ filter: Where? = nil) throws -> Int { try client.count(filter) }
+
+    /// One row of aggregate values, keyed `_count`, `_sum_<field>` and so on.
+    public func aggregate(_ aggregate: Aggregate) throws -> Row { try client.aggregate(aggregate) }
+
+    /// One row per group, each carrying the group's count and aggregates.
+    public func groupBy(_ aggregate: Aggregate) throws -> [Row] { try client.groupBy(aggregate) }
+
+    /// The rows nearest a vector.
+    public func vectorSearch(
+        _ vector: [Double],
+        take: Int = 10,
+        filter: Where? = nil,
+        vectorField: String = "embedding",
+        metric: DistanceMetric = .cosine
+    ) throws -> [T] {
+        try client.vectorSearch(vector, take: take, filter: filter, vectorField: vectorField, metric: metric).map { read($0) }
+    }
+}
+
 /// The AN5 entry point: one typed client per model, over one connection.
 ///
 /// ```

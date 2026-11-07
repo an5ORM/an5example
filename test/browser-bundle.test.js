@@ -8,6 +8,20 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+
+// Ensure esbuild binary is executable even if workspace is on a noexec/fuseblk mount
+if (!process.env.ESBUILD_BINARY_PATH) {
+  try {
+    const binPath = require.resolve('@esbuild/linux-x64/bin/esbuild');
+    const tmpBin = '/tmp/esbuild';
+    try {
+      fs.copyFileSync(binPath, tmpBin);
+      fs.chmodSync(tmpBin, 0o755);
+      process.env.ESBUILD_BINARY_PATH = tmpBin;
+    } catch {}
+  } catch {}
+}
+
 const esbuild = require('esbuild');
 
 const OUT = path.join(__dirname, '.tmp-browser-bundle.js');
