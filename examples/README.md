@@ -4,9 +4,9 @@ This directory contains runnable examples demonstrating the use of AN5 ORM gener
 
 ## Provider Support Matrix
 
-| Language | SQLite | PostgreSQL | MySQL | SQL Server (MSSQL) | Google Sheets | NBase Vector DB |
+| Language | SQLite | PostgreSQL | MySQL | SQL Server (MSSQL) | Google Sheets | Vector DBs (NBase, Qdrant, Chroma, Pinecone, Weaviate, Milvus) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **TypeScript** | `examples/typescript/sqlite` | `examples/typescript/postgres` | `examples/typescript/mysql` | `examples/typescript/mssql` | `examples/typescript/googlesheets` | `examples/typescript/nbase` |
+| **TypeScript** | `examples/typescript/sqlite` | `examples/typescript/postgres` | `examples/typescript/mysql` | `examples/typescript/mssql` | `examples/typescript/googlesheets` | `examples/typescript/{nbase,qdrant,chroma,pinecone,weaviate,milvus}` |
 | **Python** | `examples/python/sqlite` | `examples/python/postgres` | — | `examples/python/mssql` | — | — |
 | **.NET (C#)** | `examples/dotnet/Sqlite` | `examples/dotnet/Postgres` | — | `examples/dotnet/Mssql` | — | — |
 | **Golang** | `examples/golang/sqlite` | `examples/golang/postgres` | — | `examples/golang/mssql` | — | — |
@@ -53,6 +53,31 @@ SHEETS_URL="googlesheets://<spreadsheetId>;apiKey=AIzaSy..." node dist/examples/
 Dedicated neural vector database supporting standalone similarity search and hybrid relational indexing (`indexVectorsInNBase`).
 ```bash
 NBASE_URL="nbase://localhost:1307" node dist/examples/typescript/nbase/crud.js
+```
+
+### 7. Qdrant (`examples/typescript/qdrant/crud.ts`)
+```bash
+QDRANT_URL="qdrant://localhost:6333?collection=an5_example" node dist/examples/typescript/qdrant/crud.js
+```
+
+### 8. Chroma / ChromaDB (`examples/typescript/chroma/crud.ts`)
+```bash
+CHROMA_URL="chroma://localhost:8000?collection=an5_example" node dist/examples/typescript/chroma/crud.js
+```
+
+### 9. Pinecone (`examples/typescript/pinecone/crud.ts`)
+```bash
+PINECONE_URL="pinecone://my-index.svc.region.pinecone.io?apiKey=...&namespace=an5_example" node dist/examples/typescript/pinecone/crud.js
+```
+
+### 10. Weaviate (`examples/typescript/weaviate/crud.ts`)
+```bash
+WEAVIATE_URL="weaviate://localhost:8080?className=An5Example" node dist/examples/typescript/weaviate/crud.js
+```
+
+### 11. Milvus / Zilliz (`examples/typescript/milvus/crud.ts`)
+```bash
+MILVUS_URL="milvus://localhost:19530?collection=an5_example" node dist/examples/typescript/milvus/crud.js
 ```
 
 ---
