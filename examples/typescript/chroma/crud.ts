@@ -8,7 +8,7 @@
  *   npx tsc -p tsconfig.json && node dist/examples/typescript/chroma/crud.js
  *   CHROMA_URL="chroma://localhost:8000?collection=an5_example" node dist/examples/typescript/chroma/crud.js
  */
-import { createAn5Adapter, setAdapterMetadata } from '@an5/adapters';
+import { setAdapterMetadata } from '@an5/adapters';
 import { createChromaClient } from '@an5/adapters/chroma';
 import { modelToTable, modelFields, relationMap } from '../../../generated/typescript/an5Metadata';
 
@@ -45,13 +45,7 @@ export async function runChromaExample(): Promise<void> {
     );
   }
 
-  const _sidecarHint = () =>
-    createAn5Adapter({
-      connectionString: 'sqlite::memory:',
-      vectorStore: chromaUri,
-    });
-  void _sidecarHint;
-  console.log('[TypeScript/Chroma] Sidecar usage: createAn5Adapter({ connectionString: "sqlite::memory:", vectorStore: "' + chromaUri + '" })');
+  console.log('[TypeScript/Chroma] Adapter usage: createAn5Adapter({ connectionString: "' + chromaUri + '" })');
   console.log('--- [TypeScript / Chroma Vector DB Provider] Completed ---\n');
 }
 

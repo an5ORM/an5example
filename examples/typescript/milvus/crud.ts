@@ -8,7 +8,7 @@
  *   npx tsc -p tsconfig.json && node dist/examples/typescript/milvus/crud.js
  *   MILVUS_URL="milvus://localhost:19530?collection=an5_example" node dist/examples/typescript/milvus/crud.js
  */
-import { createAn5Adapter, setAdapterMetadata } from '@an5/adapters';
+import { setAdapterMetadata } from '@an5/adapters';
 import { createMilvusClient } from '@an5/adapters/milvus';
 import { modelToTable, modelFields, relationMap } from '../../../generated/typescript/an5Metadata';
 
@@ -45,13 +45,7 @@ export async function runMilvusExample(): Promise<void> {
     );
   }
 
-  const _sidecarHint = () =>
-    createAn5Adapter({
-      connectionString: 'sqlite::memory:',
-      vectorStore: milvusUri,
-    });
-  void _sidecarHint;
-  console.log('[TypeScript/Milvus] Sidecar usage: createAn5Adapter({ connectionString: "sqlite::memory:", vectorStore: "' + milvusUri + '" })');
+  console.log('[TypeScript/Milvus] Adapter usage: createAn5Adapter({ connectionString: "' + milvusUri + '" })');
   console.log('--- [TypeScript / Milvus Vector DB Provider] Completed ---\n');
 }
 

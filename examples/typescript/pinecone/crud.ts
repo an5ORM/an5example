@@ -8,7 +8,7 @@
  *   npx tsc -p tsconfig.json && node dist/examples/typescript/pinecone/crud.js
  *   PINECONE_URL="pinecone://my-index.svc.region.pinecone.io?apiKey=...&namespace=an5_example" node dist/examples/typescript/pinecone/crud.js
  */
-import { createAn5Adapter, setAdapterMetadata } from '@an5/adapters';
+import { setAdapterMetadata } from '@an5/adapters';
 import { createPineconeClient } from '@an5/adapters/pinecone';
 import { modelToTable, modelFields, relationMap } from '../../../generated/typescript/an5Metadata';
 
@@ -45,13 +45,7 @@ export async function runPineconeExample(): Promise<void> {
     );
   }
 
-  const _sidecarHint = () =>
-    createAn5Adapter({
-      connectionString: 'sqlite::memory:',
-      vectorStore: pineconeUri,
-    });
-  void _sidecarHint;
-  console.log('[TypeScript/Pinecone] Sidecar usage: createAn5Adapter({ connectionString: "sqlite::memory:", vectorStore: "' + pineconeUri + '" })');
+  console.log('[TypeScript/Pinecone] Adapter usage: createAn5Adapter({ connectionString: "' + pineconeUri + '" })');
   console.log('--- [TypeScript / Pinecone Vector DB Provider] Completed ---\n');
 }
 

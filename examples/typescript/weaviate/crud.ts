@@ -8,7 +8,7 @@
  *   npx tsc -p tsconfig.json && node dist/examples/typescript/weaviate/crud.js
  *   WEAVIATE_URL="weaviate://localhost:8080?className=An5Example" node dist/examples/typescript/weaviate/crud.js
  */
-import { createAn5Adapter, setAdapterMetadata } from '@an5/adapters';
+import { setAdapterMetadata } from '@an5/adapters';
 import { createWeaviateClient } from '@an5/adapters/weaviate';
 import { modelToTable, modelFields, relationMap } from '../../../generated/typescript/an5Metadata';
 
@@ -45,13 +45,7 @@ export async function runWeaviateExample(): Promise<void> {
     );
   }
 
-  const _sidecarHint = () =>
-    createAn5Adapter({
-      connectionString: 'sqlite::memory:',
-      vectorStore: weaviateUri,
-    });
-  void _sidecarHint;
-  console.log('[TypeScript/Weaviate] Sidecar usage: createAn5Adapter({ connectionString: "sqlite::memory:", vectorStore: "' + weaviateUri + '" })');
+  console.log('[TypeScript/Weaviate] Adapter usage: createAn5Adapter({ connectionString: "' + weaviateUri + '" })');
   console.log('--- [TypeScript / Weaviate Vector DB Provider] Completed ---\n');
 }
 

@@ -8,7 +8,7 @@
  *   npx tsc -p tsconfig.json && node dist/examples/typescript/qdrant/crud.js
  *   QDRANT_URL="qdrant://localhost:6333?collection=an5_example" node dist/examples/typescript/qdrant/crud.js
  */
-import { createAn5Adapter, setAdapterMetadata } from '@an5/adapters';
+import { setAdapterMetadata } from '@an5/adapters';
 import { createQdrantClient } from '@an5/adapters/qdrant';
 import { modelToTable, modelFields, relationMap } from '../../../generated/typescript/an5Metadata';
 
@@ -45,14 +45,7 @@ export async function runQdrantExample(): Promise<void> {
     );
   }
 
-  // Sidecar mode example:
-  const _sidecarHint = () =>
-    createAn5Adapter({
-      connectionString: 'sqlite::memory:',
-      vectorStore: qdrantUri,
-    });
-  void _sidecarHint;
-  console.log('[TypeScript/Qdrant] Sidecar usage: createAn5Adapter({ connectionString: "sqlite::memory:", vectorStore: "' + qdrantUri + '" })');
+  console.log('[TypeScript/Qdrant] Adapter usage: createAn5Adapter({ connectionString: "' + qdrantUri + '" })');
   console.log('--- [TypeScript / Qdrant Vector DB Provider] Completed ---\n');
 }
 
