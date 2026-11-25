@@ -58,3 +58,17 @@ pub fn model_fields_map() -> Vec<(&'static str, serde_json::Value)> {
     ]
 }
 
+/// Relation metadata per model alias, for adapter registration.
+pub fn relation_map() -> Vec<(&'static str, Vec<(&'static str, &'static str, &'static str, &'static str, &'static str)>)> {
+    vec![
+        ("Order", vec![("user", "user", "one", "user_id", "id")]),
+        ("order", vec![("user", "user", "one", "user_id", "id")]),
+        ("Orders", vec![("user", "user", "one", "user_id", "id")]),
+        ("orders", vec![("user", "user", "one", "user_id", "id")]),
+        ("User", vec![("orders", "order", "many", "user_id", "id")]),
+        ("user", vec![("orders", "order", "many", "user_id", "id")]),
+        ("Users", vec![("orders", "order", "many", "user_id", "id")]),
+        ("users", vec![("orders", "order", "many", "user_id", "id")]),
+    ]
+}
+

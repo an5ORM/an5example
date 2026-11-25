@@ -9,9 +9,9 @@
 //!   npm run test:rust
 
 use an5_client::{
-    An5Client, BoolFilter, IntFilter, OrderCreateInput, OrderWhereInput, SortOrder, StringFilter,
-    UserCreateInput, UserFindManyArgs, UserFindUniqueArgs, UserOrderByInput, UserUpdateArgs,
-    UserUpdateInput, UserVectorSearchArgs, UserWhereInput,
+    An5Client, BoolFilter, IntFilter, ListRelationFilter, OrderCreateInput, OrderWhereInput,
+    RelationFilter, SortOrder, StringFilter, UserCreateInput, UserFindManyArgs, UserFindUniqueArgs,
+    UserOrderByInput, UserUpdateArgs, UserUpdateInput, UserVectorSearchArgs, UserWhereInput,
 };
 use serde_json::json;
 
@@ -214,6 +214,66 @@ async fn main() {
         .expect("find_many orders");
     println!("alice orders: {}", alice_orders.len());
     assert_eq!(alice_orders.len(), 2);
+
+    // ── Read: typed relation filters (some / none / is) + in_list ─────────────
+    let users_with_big_orders = users
+        .find_many(&UserFindManyArgs {
+            where_: Some(UserWhereInput {
+                orders: Some(ListRelationFilter {
+                    some: Some(Box::new(OrderWhereInput {
+                        total: Some(IntFilter {
+                            gte: Some(200),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("relation some filter");
+    assert_eq!(users_with_big_orders.len(), 1);
+    assert_eq!(users_with_big_orders[0].email, "alice@example.com");
+
+    let users_without_orders = users
+        .find_many(&UserFindManyArgs {
+            where_: Some(UserWhereInput {
+                orders: Some(ListRelationFilter {
+                    none: Some(Box::new(OrderWhereInput::default())),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("relation none filter");
+    assert_eq!(users_without_orders.len(), 1);
+    assert_eq!(users_without_orders[0].email, "bob@example.com");
+
+    let orders_by_owner_email = orders
+        .find_many(&an5_client::OrderFindManyArgs {
+            where_: Some(OrderWhereInput {
+                user: Some(RelationFilter {
+                    is: Some(Some(Box::new(UserWhereInput {
+                        email: Some(StringFilter {
+                            in_list: vec!["alice@example.com".to_string()],
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }))),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("relation is filter");
+    assert_eq!(orders_by_owner_email.len(), 2);
 
     // ── Count ────────────────────────────────────────────────────────────────
     let total_users = users

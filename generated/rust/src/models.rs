@@ -45,6 +45,8 @@ pub struct OrderWhereInput {
     pub status: Option<StringFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTimeFilter>,
+    #[serde(default, rename = "user", skip_serializing_if = "Option::is_none")]
+    pub user: Option<RelationFilter<UserWhereInput>>,
 }
 
 /// Type-safe ORDER BY for Order queries.
@@ -191,6 +193,8 @@ pub struct UserWhereInput {
     pub embedding: Option<StringFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTimeFilter>,
+    #[serde(default, rename = "orders", skip_serializing_if = "Option::is_none")]
+    pub orders: Option<ListRelationFilter<OrderWhereInput>>,
 }
 
 /// Type-safe ORDER BY for User queries.

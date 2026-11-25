@@ -153,7 +153,7 @@ pub struct StringFilter {
     pub lt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lte: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, rename = "in", skip_serializing_if = "Vec::is_empty")]
     pub in_list: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_in: Vec<String>,
@@ -175,7 +175,7 @@ pub struct IntFilter {
     pub lt: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lte: Option<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, rename = "in", skip_serializing_if = "Vec::is_empty")]
     pub in_list: Vec<i64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_in: Vec<i64>,
@@ -197,7 +197,7 @@ pub struct NumberFilter {
     pub lt: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lte: Option<f64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, rename = "in", skip_serializing_if = "Vec::is_empty")]
     pub in_list: Vec<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_in: Vec<f64>,
@@ -276,6 +276,47 @@ pub struct DateTimeFilter {
     pub lt: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lte: Option<DateTime<Utc>>,
+}
+
+/// Type-safe filter for to-many relations (`some` / `none` / `every`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListRelationFilter<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub some: Option<Box<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none: Option<Box<T>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub every: Option<Box<T>>,
+}
+
+impl<T> Default for ListRelationFilter<T> {
+    fn default() -> Self {
+        Self {
+            some: None,
+            none: None,
+            every: None,
+        }
+    }
+}
+
+/// Type-safe filter for to-one relations (`is` / `isNot`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelationFilter<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is: Option<Option<Box<T>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_not: Option<Option<Box<T>>>,
+}
+
+impl<T> Default for RelationFilter<T> {
+    fn default() -> Self {
+        Self {
+            is: None,
+            is_not: None,
+        }
+    }
 }
 
 // ─── SQL fragment builders (shared) ─────────────────────────────────────────
