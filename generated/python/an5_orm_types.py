@@ -2,17 +2,21 @@
 """
 AN5 ORM typed filter/args dataclasses.
 
-These describe the filter shapes the Python client accepts. The adapter reads plain
-dicts, not these dataclasses, and it quotes every key verbatim, so use the schema
-field names (`createdAt`, not `created_at`):
+The Python adapter accepts both these dataclasses (`UserWhereInput`, `StringFilter`,
+`UserOrderByInput`, `UserFindManyArgs`, etc.) and plain dicts with either schema
+field names (`createdAt`) or snake_case aliases (`created_at`):
+
+    db.user.find_many(where=UserWhereInput(name=StringFilter(contains="John")),
+                      order_by=UserOrderByInput(created_at="desc"),
+                      take=10)
 
     db.user.find_many(where={"name": {"contains": "John"}},
-                      order_by={"createdAt": "desc"},
+                      order_by={"created_at": "desc"},
                       take=10)
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 
 # ─── Base filter types ────────────────────────────────────────────────────────
@@ -60,6 +64,7 @@ class NumberFilter:
 class BoolFilter:
     """Type-safe filter for boolean fields."""
     equals: Optional[bool] = None
+    not_: Optional[bool] = None
 
 @dataclass
 class DateTimeFilter:
@@ -80,12 +85,13 @@ class OrderWhereInput:
     """Type-safe WHERE filter for Order queries."""
     AND: Optional[List['OrderWhereInput']] = None
     OR: Optional[List['OrderWhereInput']] = None
-    NOT: Optional['OrderWhereInput'] = None
-    id: Optional[StringFilter] = None
-    user_id: Optional[StringFilter] = None
-    total: Optional[IntFilter] = None
-    status: Optional[StringFilter] = None
-    created_at: Optional[DateTimeFilter] = None
+    NOT: Optional[Union['OrderWhereInput', List['OrderWhereInput']]] = None
+    id: Optional[Union[str, StringFilter]] = None
+    user_id: Optional[Union[str, StringFilter]] = None
+    total: Optional[Union[int, IntFilter]] = None
+    status: Optional[Union[str, StringFilter]] = None
+    created_at: Optional[Union[datetime, str, DateTimeFilter]] = None
+    user: Optional[Dict[str, Any]] = None
 
 @dataclass
 class OrderOrderByInput:
@@ -119,14 +125,16 @@ class OrderFindManyArgs:
     order_by: Optional[OrderOrderByInput] = None
     take: Optional[int] = None
     skip: int = 0
-    select: Optional[List[str]] = None
+    select: Optional[Union[List[str], Dict[str, Any]]] = None
+    include: Optional[Dict[str, Any]] = None
 
 @dataclass
 class OrderFindFirstArgs:
     """ORM-style args for Order.find_first()."""
     where: Optional[OrderWhereInput] = None
     order_by: Optional[OrderOrderByInput] = None
-    select: Optional[List[str]] = None
+    select: Optional[Union[List[str], Dict[str, Any]]] = None
+    include: Optional[Dict[str, Any]] = None
 
 # ─── User ORM Types ────────────────────────────────────────────────────────
 
@@ -135,14 +143,15 @@ class UserWhereInput:
     """Type-safe WHERE filter for User queries."""
     AND: Optional[List['UserWhereInput']] = None
     OR: Optional[List['UserWhereInput']] = None
-    NOT: Optional['UserWhereInput'] = None
-    id: Optional[StringFilter] = None
-    email: Optional[StringFilter] = None
-    name: Optional[StringFilter] = None
-    is_active: Optional[BoolFilter] = None
-    score: Optional[IntFilter] = None
-    embedding: Optional[StringFilter] = None
-    created_at: Optional[DateTimeFilter] = None
+    NOT: Optional[Union['UserWhereInput', List['UserWhereInput']]] = None
+    id: Optional[Union[str, StringFilter]] = None
+    email: Optional[Union[str, StringFilter]] = None
+    name: Optional[Union[str, StringFilter]] = None
+    is_active: Optional[Union[bool, BoolFilter]] = None
+    score: Optional[Union[int, IntFilter]] = None
+    embedding: Optional[Union[str, StringFilter]] = None
+    created_at: Optional[Union[datetime, str, DateTimeFilter]] = None
+    orders: Optional[Dict[str, Any]] = None
 
 @dataclass
 class UserOrderByInput:
@@ -182,12 +191,14 @@ class UserFindManyArgs:
     order_by: Optional[UserOrderByInput] = None
     take: Optional[int] = None
     skip: int = 0
-    select: Optional[List[str]] = None
+    select: Optional[Union[List[str], Dict[str, Any]]] = None
+    include: Optional[Dict[str, Any]] = None
 
 @dataclass
 class UserFindFirstArgs:
     """ORM-style args for User.find_first()."""
     where: Optional[UserWhereInput] = None
     order_by: Optional[UserOrderByInput] = None
-    select: Optional[List[str]] = None
+    select: Optional[Union[List[str], Dict[str, Any]]] = None
+    include: Optional[Dict[str, Any]] = None
 

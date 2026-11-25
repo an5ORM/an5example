@@ -29,6 +29,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "generate
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "an5Adapters", "python"))
 
 import an5_client
+from an5_orm_types import (
+    IntFilter,
+    StringFilter,
+    UserFindManyArgs,
+    UserOrderByInput,
+    UserWhereInput,
+)
 
 
 def _ts(offset_minutes: int = 0) -> str:
@@ -263,7 +270,35 @@ def main():
         where={"orders": {"some": {"total": {"gte": 400}}}},
     )
     big_user_names = ", ".join(u["name"] or "" for u in users_with_big_orders)
-    print(f"  ✓ Relation filter (orders.some.total >= 400): found {big_user_names}\n")
+    print(f"  ✓ Relation filter (orders.some.total >= 400): found {big_user_names}")
+
+    # To-one relation filter: find orders belonging to Alice
+    alice_orders = db.order.find_many(
+        where={"user": {"is": {"email": "alice@example.com"}}},
+        order_by={"created_at": "asc"},
+    )
+    assert [o["id"] for o in alice_orders] == ["o_a1"]
+    print(f"  ✓ To-one relation filter (user.is.email='alice@example.com'): {len(alice_orders)} order(s)")
+
+    # Typed dataclasses & snake_case query keys
+    typed_users = db.user.find_many(
+        UserFindManyArgs(
+            where=UserWhereInput(
+                is_active=True,
+                email=StringFilter(ends_with="@example.com"),
+                score=IntFilter(gte=100),
+            ),
+            order_by=UserOrderByInput(created_at="desc"),
+            select=["id", "name", "is_active", "created_at"],
+        )
+    )
+    assert len(typed_users) >= 2 and all("isActive" in u and "createdAt" in u for u in typed_users)
+    snake_orders = db.order.find_many(
+        where={"user_id": alice["id"]},
+        order_by={"created_at": "asc"},
+    )
+    assert len(snake_orders) == 1
+    print(f"  ✓ Typed dataclasses & snake_case keys matched {len(typed_users)} user(s)\n")
 
     # ───────────────────────────────────────────────────────────────────────────
     # 7. MUTATIONS: update, Field Math, upsert, and delete
