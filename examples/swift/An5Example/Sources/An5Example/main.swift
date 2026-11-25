@@ -144,8 +144,7 @@ func runExample() throws {
     try check(strong.count == 1, "expected one high scorer, got \(strong.count)")
 
     // ── Read: nested AND/OR through the typed where ───────────────────────────
-    // A filter the adapter cannot read is not an error, it is an empty WHERE, which matches
-    // every row — so these counts are what prove the conditions survived the trip.
+    // These counts prove both branches of the typed AND/OR group survived the trip.
     var activeWhere = An5Orm.UserWhere()
     activeWhere.isActive = An5Orm.BoolFilter.`is`(true)
     let nestedAnd = try db.user.findMany(
@@ -179,16 +178,50 @@ func runExample() throws {
     try check(loaded.orders.count == 2, "include returned \(loaded.orders.count) orders, expected 2")
     try check(loaded.orders.first?.total != nil, "the included rows were not mapped onto the model")
 
-    // ── Read: relation filter on the child side ───────────────────────────────
+    // ── Read: relation filters via generated ListRelationFilter & RelationFilter
+    var paidOrderWhere = An5Orm.OrderWhere()
+    paidOrderWhere.status = An5Orm.StringFilter.`is`("paid")
+
+    var usersWithPaidOrders = An5Orm.UserWhere()
+    usersWithPaidOrders.orders = .some(paidOrderWhere)
+    let matchedUsers = try db.user.findMany(filter: usersWithPaidOrders.build())
+    try check(matchedUsers.count == 1 && matchedUsers.first?.id == aliceId, "expected Alice to have a paid order")
+
+    var usersWithoutPaidOrders = An5Orm.UserWhere()
+    usersWithoutPaidOrders.orders = .none(paidOrderWhere)
+    let withoutPaid = try db.user.findMany(filter: usersWithoutPaidOrders.build())
+    try check(withoutPaid.count == 1 && withoutPaid.first?.email == "bob@example.com", "expected Bob to have no paid orders")
+
+    var highValueOrder = An5Orm.OrderWhere()
+    highValueOrder.total = An5Orm.NumberFilter.atLeast(50)
+    var everyHighValue = An5Orm.UserWhere()
+    everyHighValue.orders = .every(highValueOrder)
+    let allHighValueUsers = try db.user.findMany(filter: everyHighValue.build())
+    try check(allHighValueUsers.count == 2, "expected Alice (all >= 50) and Bob (no orders), got \(allHighValueUsers.count)")
+
+    var aliceAuthorWhere = An5Orm.UserWhere()
+    aliceAuthorWhere.email = An5Orm.StringFilter.`is`("alice@example.com")
+    var ordersByAlice = An5Orm.OrderWhere()
+    ordersByAlice.user = .is(aliceAuthorWhere)
     let aliceOrders = try db.order.findMany(
         Query(
-            filter: ["userId": ["equals": aliceId]],
-            orderBy: [["total": "desc"]]
+            filter: ordersByAlice.build(),
+            orderBy: [["total": "desc"]],
+            include: ["user": true]
         )
     )
     print("alice orders by total: \(aliceOrders.count)")
     try check(aliceOrders.count == 2, "relation filter returned \(aliceOrders.count)")
     try check(aliceOrders.first?.total == 250, "orderBy total desc was not applied")
+    try check(aliceOrders.first?.user?.email == "alice@example.com", "to-one include did not populate user")
+
+    var rejectedBogusOp = false
+    do {
+        _ = try db.user.findMany(filter: ["email": ["bogus": "alice@example.com"]])
+    } catch An5Error.invalidQuery {
+        rejectedBogusOp = true
+    }
+    try check(rejectedBogusOp, "expected unsupported filter operator to throw An5Error.invalidQuery")
 
     // ── Aggregate ─────────────────────────────────────────────────────────────
     var ordersAggregate = Aggregate()

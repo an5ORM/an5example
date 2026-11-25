@@ -37,10 +37,10 @@ public enum An5Metadata {
     /// Model name to its relations, keyed by relation name.
     public static let relationMap: [String: [String: [String: String]]] = [
         "Order": [
-            "user": ["modelName": "User", "relationType": "", "foreignKey": "userId", "localKey": "id"],
+            "user": ["modelName": "User", "relationType": "one", "foreignKey": "userId", "localKey": "id"],
         ],
         "User": [
-            "orders": ["modelName": "Order", "relationType": "", "foreignKey": "userId", "localKey": "id"],
+            "orders": ["modelName": "Order", "relationType": "many", "foreignKey": "userId", "localKey": "id"],
         ],
     ]
 
