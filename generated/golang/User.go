@@ -33,6 +33,7 @@ type UserWhereInput struct {
 	Score *IntFilter
 	Embedding *StringFilter
 	CreatedAt *DateTimeFilter
+	Orders *ListRelationFilter[OrderWhereInput]
 }
 
 // UserOrderByInput provides type-safe ordering for User queries.

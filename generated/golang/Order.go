@@ -29,6 +29,7 @@ type OrderWhereInput struct {
 	Total *IntFilter
 	Status *StringFilter
 	CreatedAt *DateTimeFilter
+	User *RelationFilter[UserWhereInput]
 }
 
 // OrderOrderByInput provides type-safe ordering for Order queries.

@@ -63,6 +63,44 @@ type IntFilter struct {
 // BoolFilter provides type-safe boolean field filtering options.
 type BoolFilter struct {
 	Equals *bool
+	Not    *bool
+}
+
+type listRelationFilterMarker interface {
+	isListRelationFilter()
+	rawListRelationTargets() (some interface{}, none interface{}, every interface{})
+}
+
+type relationFilterMarker interface {
+	isRelationFilter()
+	rawRelationTargets() (is interface{}, isNull bool, isNot interface{}, isNotNull bool)
+}
+
+// ListRelationFilter provides type-safe correlated filtering for to-many relations.
+type ListRelationFilter[T any] struct {
+	Some  *T
+	None  *T
+	Every *T
+}
+
+func (ListRelationFilter[T]) isListRelationFilter() {}
+
+func (f ListRelationFilter[T]) rawListRelationTargets() (interface{}, interface{}, interface{}) {
+	return f.Some, f.None, f.Every
+}
+
+// RelationFilter provides type-safe correlated filtering for to-one relations.
+type RelationFilter[T any] struct {
+	Is        *T
+	IsNull    bool
+	IsNot     *T
+	IsNotNull bool
+}
+
+func (RelationFilter[T]) isRelationFilter() {}
+
+func (f RelationFilter[T]) rawRelationTargets() (interface{}, bool, interface{}, bool) {
+	return f.Is, f.IsNull, f.IsNot, f.IsNotNull
 }
 
 // DateTimeFilter provides type-safe datetime field filtering options.
@@ -159,14 +197,24 @@ type TableClient[T any] struct {
 	DB        *sql.DB
 	Dialect   Dialect
 	TableName string
+	ModelName string
 }
 
 // NewTableClient creates a typed table client.
 func NewTableClient[T any](db *sql.DB, tableName string, dialect Dialect) *TableClient[T] {
+	typ := reflect.TypeOf((*T)(nil)).Elem()
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	modelName := typ.Name()
+	if modelName == "" {
+		modelName = tableName
+	}
 	return &TableClient[T]{
 		DB:        db,
 		Dialect:   dialect,
 		TableName: tableName,
+		ModelName: modelName,
 	}
 }
 
@@ -178,15 +226,45 @@ func (c *TableClient[T]) quoteName(name string) string {
 	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
 }
 
-// quoteTable quotes a schema.table name for the dialect.
-func (c *TableClient[T]) quoteTable() string {
-	parts := strings.Split(c.TableName, ".")
-	if c.Dialect == DialectSqlite && len(parts) == 2 && strings.EqualFold(parts[0], "dbo") { parts = parts[1:] }
-	quoted := make([]string, len(parts))
-	for i, p := range parts {
+func stripTablePartWrapping(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '[' && s[len(s)-1] == ']' {
+		return s[1 : len(s)-1]
+	}
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	if len(s) >= 2 && s[0] == 96 && s[len(s)-1] == 96 {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+func (c *TableClient[T]) quoteTableName(rawTable string) string {
+	rawParts := strings.Split(rawTable, ".")
+	cleaned := make([]string, 0, len(rawParts))
+	for _, p := range rawParts {
+		seg := stripTablePartWrapping(p)
+		if seg != "" {
+			cleaned = append(cleaned, seg)
+		}
+	}
+	if len(cleaned) == 0 {
+		return c.quoteName(rawTable)
+	}
+	if c.Dialect == DialectSqlite && len(cleaned) == 2 && strings.EqualFold(cleaned[0], "dbo") {
+		cleaned = cleaned[1:]
+	}
+	quoted := make([]string, len(cleaned))
+	for i, p := range cleaned {
 		quoted[i] = c.quoteName(p)
 	}
 	return strings.Join(quoted, ".")
+}
+
+// quoteTable quotes a schema.table name for the dialect.
+func (c *TableClient[T]) quoteTable() string {
+	return c.quoteTableName(c.TableName)
 }
 
 // ph returns a positional placeholder - ? for MSSQL, $N for Postgres.
@@ -364,13 +442,29 @@ func buildStringFilter(col string, f *StringFilter, args []interface{}, ph func(
 		args = append(args, *f.Lte)
 		parts = append(parts, col+" <= "+ph(len(args)))
 	}
-	if len(f.In) > 0 {
-		phs := make([]string, len(f.In))
-		for i, v := range f.In {
-			args = append(args, v)
-			phs[i] = ph(len(args))
+	if f.In != nil {
+		if len(f.In) == 0 {
+			parts = append(parts, "1=0")
+		} else {
+			phs := make([]string, len(f.In))
+			for i, v := range f.In {
+				args = append(args, v)
+				phs[i] = ph(len(args))
+			}
+			parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
 		}
-		parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
+	}
+	if f.NotIn != nil {
+		if len(f.NotIn) == 0 {
+			parts = append(parts, "1=1")
+		} else {
+			phs := make([]string, len(f.NotIn))
+			for i, v := range f.NotIn {
+				args = append(args, v)
+				phs[i] = ph(len(args))
+			}
+			parts = append(parts, col+" NOT IN ("+strings.Join(phs, ", ")+")")
+		}
 	}
 	return strings.Join(parts, " AND "), args
 }
@@ -387,10 +481,23 @@ func buildNumberFilter(col string, f *NumberFilter, args []interface{}, ph func(
 	if f.Gte != nil    { args = append(args, *f.Gte);    parts = append(parts, col+" >= "+ph(len(args))) }
 	if f.Lt != nil     { args = append(args, *f.Lt);     parts = append(parts, col+" < "+ph(len(args))) }
 	if f.Lte != nil    { args = append(args, *f.Lte);    parts = append(parts, col+" <= "+ph(len(args))) }
-	if len(f.In) > 0 {
-		phs := make([]string, len(f.In))
-		for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
-		parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
+	if f.In != nil {
+		if len(f.In) == 0 {
+			parts = append(parts, "1=0")
+		} else {
+			phs := make([]string, len(f.In))
+			for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
+			parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
+		}
+	}
+	if f.NotIn != nil {
+		if len(f.NotIn) == 0 {
+			parts = append(parts, "1=1")
+		} else {
+			phs := make([]string, len(f.NotIn))
+			for i, v := range f.NotIn { args = append(args, v); phs[i] = ph(len(args)) }
+			parts = append(parts, col+" NOT IN ("+strings.Join(phs, ", ")+")")
+		}
 	}
 	return strings.Join(parts, " AND "), args
 }
@@ -407,10 +514,40 @@ func buildIntFilter(col string, f *IntFilter, args []interface{}, ph func(int) s
 	if f.Gte != nil    { args = append(args, *f.Gte);    parts = append(parts, col+" >= "+ph(len(args))) }
 	if f.Lt != nil     { args = append(args, *f.Lt);     parts = append(parts, col+" < "+ph(len(args))) }
 	if f.Lte != nil    { args = append(args, *f.Lte);    parts = append(parts, col+" <= "+ph(len(args))) }
-	if len(f.In) > 0 {
-		phs := make([]string, len(f.In))
-		for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
-		parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
+	if f.In != nil {
+		if len(f.In) == 0 {
+			parts = append(parts, "1=0")
+		} else {
+			phs := make([]string, len(f.In))
+			for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
+			parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
+		}
+	}
+	if f.NotIn != nil {
+		if len(f.NotIn) == 0 {
+			parts = append(parts, "1=1")
+		} else {
+			phs := make([]string, len(f.NotIn))
+			for i, v := range f.NotIn { args = append(args, v); phs[i] = ph(len(args)) }
+			parts = append(parts, col+" NOT IN ("+strings.Join(phs, ", ")+")")
+		}
+	}
+	return strings.Join(parts, " AND "), args
+}
+
+// buildBoolFilter converts a BoolFilter to SQL fragments.
+func buildBoolFilter(col string, f *BoolFilter, args []interface{}, ph func(int) string) (string, []interface{}) {
+	if f == nil {
+		return "", args
+	}
+	var parts []string
+	if f.Equals != nil {
+		args = append(args, *f.Equals)
+		parts = append(parts, col+" = "+ph(len(args)))
+	}
+	if f.Not != nil {
+		args = append(args, *f.Not)
+		parts = append(parts, col+" <> "+ph(len(args)))
 	}
 	return strings.Join(parts, " AND "), args
 }
@@ -427,13 +564,137 @@ func buildDateTimeFilter(col string, f *DateTimeFilter, args []interface{}, ph f
 	if f.Gte != nil    { args = append(args, *f.Gte);    parts = append(parts, col+" >= "+ph(len(args))) }
 	if f.Lt != nil     { args = append(args, *f.Lt);     parts = append(parts, col+" < "+ph(len(args))) }
 	if f.Lte != nil    { args = append(args, *f.Lte);    parts = append(parts, col+" <= "+ph(len(args))) }
+	if f.In != nil {
+		if len(f.In) == 0 {
+			parts = append(parts, "1=0")
+		} else {
+			phs := make([]string, len(f.In))
+			for i, v := range f.In { args = append(args, v); phs[i] = ph(len(args)) }
+			parts = append(parts, col+" IN ("+strings.Join(phs, ", ")+")")
+		}
+	}
+	if f.NotIn != nil {
+		if len(f.NotIn) == 0 {
+			parts = append(parts, "1=1")
+		} else {
+			phs := make([]string, len(f.NotIn))
+			for i, v := range f.NotIn { args = append(args, v); phs[i] = ph(len(args)) }
+			parts = append(parts, col+" NOT IN ("+strings.Join(phs, ", ")+")")
+		}
+	}
 	return strings.Join(parts, " AND "), args
+}
+
+func resolveModelTable(modelName string) string {
+	if tbl, ok := ModelToTable[modelName]; ok {
+		return tbl
+	}
+	for k, tbl := range ModelToTable {
+		if strings.EqualFold(k, modelName) {
+			return tbl
+		}
+	}
+	return modelName
+}
+
+func modelHasFieldMeta(modelName, col string) bool {
+	fields, ok := ModelFields[modelName]
+	if !ok {
+		for k, v := range ModelFields {
+			if strings.EqualFold(k, modelName) {
+				fields = v
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok || len(fields) == 0 {
+		return false
+	}
+	if fields[col] {
+		return true
+	}
+	targetSnake := goToSnakeCase(col)
+	for k, enabled := range fields {
+		if !enabled {
+			continue
+		}
+		if strings.EqualFold(k, col) || goToSnakeCase(k) == targetSnake {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveModelRelation(modelName, relKey string) (RelationDef, bool) {
+	rels, ok := RelationMap[modelName]
+	if !ok {
+		for k, v := range RelationMap {
+			if strings.EqualFold(k, modelName) {
+				rels = v
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok || len(rels) == 0 {
+		return RelationDef{}, false
+	}
+	if def, exists := rels[relKey]; exists {
+		return def, true
+	}
+	targetSnake := goToSnakeCase(relKey)
+	for k, def := range rels {
+		if strings.EqualFold(k, relKey) || goToSnakeCase(k) == targetSnake {
+			return def, true
+		}
+	}
+	return RelationDef{}, false
+}
+
+func resolveRelationKeys(parentModel string, rel RelationDef) (string, string) {
+	rawFK := rel.ForeignKey
+	if rawFK == "" {
+		rawFK = "id"
+	}
+	rawLK := rel.LocalKey
+	if rawLK == "" {
+		rawLK = "id"
+	}
+	if rel.RelationType == "many" {
+		return rawFK, rawLK
+	}
+	if (modelHasFieldMeta(rel.ModelName, rawFK) && !modelHasFieldMeta(rel.ModelName, rawLK)) ||
+		(modelHasFieldMeta(parentModel, rawLK) && !modelHasFieldMeta(parentModel, rawFK)) {
+		return rawFK, rawLK
+	}
+	return rawLK, rawFK
+}
+
+func sanitizeRelationAlias(name string) string {
+	var sb strings.Builder
+	sb.Grow(len(name))
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteByte('_')
+		}
+	}
+	cleaned := sb.String()
+	if len(cleaned) > 0 && ((cleaned[0] >= 'a' && cleaned[0] <= 'z') || (cleaned[0] >= 'A' && cleaned[0] <= 'Z')) {
+		return cleaned
+	}
+	return "rel_" + cleaned
 }
 
 // FindMany returns multiple records. Use model-specific FindManyArgs for type-safe filtering.
 // Example: db.User.FindMany(ctx, &UserFindManyArgs{ Where: &UserWhereInput{ Name: &StringFilter{Contains: "Jo"} } })
 func (c *TableClient[T]) FindMany(ctx context.Context, args interface{}) ([]T, error) {
-	clause, orderBy, take, skip, selectCols, queryArgs := c.parseArgs(args)
+	clause, orderBy, take, skip, selectCols, queryArgs, err := c.parseArgs(args)
+	if err != nil {
+		return nil, err
+	}
 	table := c.quoteTable()
 	var query string
 	if len(selectCols) > 0 {
@@ -496,13 +757,16 @@ func (c *TableClient[T]) FindUnique(ctx context.Context, args interface{}) (*T, 
 
 // Count returns total records matching criteria.
 func (c *TableClient[T]) Count(ctx context.Context, args interface{}) (int64, error) {
-	clause, _, _, _, _, queryArgs := c.parseArgs(args)
+	clause, _, _, _, _, queryArgs, err := c.parseArgs(args)
+	if err != nil {
+		return 0, err
+	}
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", c.quoteTable())
 	if clause != "" {
 		query += " WHERE " + clause
 	}
 	var cnt int64
-	err := c.DB.QueryRowContext(ctx, query, queryArgs...).Scan(&cnt)
+	err = c.DB.QueryRowContext(ctx, query, queryArgs...).Scan(&cnt)
 	return cnt, err
 }
 
@@ -600,7 +864,10 @@ func (c *TableClient[T]) UpdateMany(ctx context.Context, whereArgs interface{}, 
 		sets = append(sets, c.quoteName(col)+" = "+c.ph(len(execArgs)))
 	}
 
-	clause, _, _, _, _, whereQueryArgs := c.parseArgsWithOffset(whereArgs, len(execArgs)+1)
+	clause, _, _, _, _, whereQueryArgs, err := c.parseArgsWithOffset(whereArgs, len(execArgs)+1)
+	if err != nil {
+		return 0, err
+	}
 	execArgs = append(execArgs, whereQueryArgs...)
 	query := fmt.Sprintf("UPDATE %s SET %s", c.quoteTable(), strings.Join(sets, ", "))
 	if clause != "" {
@@ -627,7 +894,10 @@ func (c *TableClient[T]) Delete(ctx context.Context, id interface{}) (bool, erro
 
 // DeleteMany removes records matching where criteria.
 func (c *TableClient[T]) DeleteMany(ctx context.Context, args interface{}) (int64, error) {
-	clause, _, _, _, _, queryArgs := c.parseArgs(args)
+	clause, _, _, _, _, queryArgs, err := c.parseArgs(args)
+	if err != nil {
+		return 0, err
+	}
 	query := fmt.Sprintf("DELETE FROM %s", c.quoteTable())
 	if clause != "" {
 		query += " WHERE " + clause
@@ -687,7 +957,10 @@ func (c *TableClient[T]) Transaction(ctx context.Context, fn func(tx *sql.Tx) er
 
 // Aggregate returns aggregate calculations (count, sum, avg, min, max).
 func (c *TableClient[T]) Aggregate(ctx context.Context, args AggregateArgs) (map[string]interface{}, error) {
-	clause, _, _, _, _, queryArgs := c.parseArgs(args.Where)
+	clause, _, _, _, _, queryArgs, err := c.parseArgs(args.Where)
+	if err != nil {
+		return nil, err
+	}
 	var selectParts []string
 	if args.Count || (len(args.Sum) == 0 && len(args.Avg) == 0 && len(args.Min) == 0 && len(args.Max) == 0) {
 		selectParts = append(selectParts, "COUNT(*) AS _count")
@@ -743,7 +1016,10 @@ func (c *TableClient[T]) GroupBy(ctx context.Context, args GroupByArgs) ([]map[s
 	if len(args.By) == 0 {
 		return nil, fmt.Errorf("GroupBy requires at least one column in 'By'")
 	}
-	clause, _, _, _, _, queryArgs := c.parseArgs(args.Where)
+	clause, _, _, _, _, queryArgs, err := c.parseArgs(args.Where)
+	if err != nil {
+		return nil, err
+	}
 	byCols := make([]string, len(args.By))
 	for i, col := range args.By {
 		byCols[i] = c.quoteName(col)
@@ -803,41 +1079,53 @@ func (c *TableClient[T]) GroupBy(ctx context.Context, args GroupByArgs) ([]map[s
 
 // parseArgs is the generic where/orderBy/take/skip extractor.
 // It uses reflection to read WhereClause, OrderBy, Take, Skip, Select from any args struct.
-func (c *TableClient[T]) parseArgs(args interface{}) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}) {
+func (c *TableClient[T]) parseArgs(args interface{}) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}, err error) {
 	return c.parseArgsWithOffset(args, 1)
 }
 
-func (c *TableClient[T]) parseArgsWithOffset(args interface{}, offset int) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}) {
+func (c *TableClient[T]) parseArgsWithOffset(args interface{}, offset int) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}, err error) {
 	if args == nil {
 		return
 	}
 	v := reflect.ValueOf(args)
-	if v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return
 		}
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {
+		err = fmt.Errorf("query args must be a struct, got %T", args)
 		return
 	}
 
 	// Where
 	whereField := v.FieldByName("Where")
 	if whereField.IsValid() {
-		if !whereField.IsNil() {
-			elem := whereField
-			if elem.Kind() == reflect.Ptr {
-				elem = elem.Elem()
+		elem := whereField
+		hasValue := true
+		for elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface {
+			if elem.IsNil() {
+				hasValue = false
+				break
 			}
-			wc, wa := c.buildWhereFromStruct(elem, offset)
-			whereClause = wc
-			queryArgs = wa
+			elem = elem.Elem()
+		}
+		if hasValue {
+			if elem.Kind() != reflect.Struct {
+				err = fmt.Errorf("where clause must be a struct, got %s", elem.Type().String())
+				return
+			}
+			whereClause, queryArgs, err = c.buildWhereFromStructWithContext(elem, c.ModelName, offset, "", "", "")
+			if err != nil {
+				return
+			}
 		}
 	} else {
-		wc, wa := c.buildWhereFromStruct(v, offset)
-		whereClause = wc
-		queryArgs = wa
+		whereClause, queryArgs, err = c.buildWhereFromStructWithContext(v, c.ModelName, offset, "", "", "")
+		if err != nil {
+			return
+		}
 	}
 
 	// OrderBy
@@ -886,14 +1174,34 @@ func (c *TableClient[T]) parseArgsWithOffset(args interface{}, offset int) (wher
 	return
 }
 
+func isPtrTargetPresent(target interface{}) (reflect.Value, bool) {
+	if target == nil {
+		return reflect.Value{}, false
+	}
+	rv := reflect.ValueOf(target)
+	for rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return reflect.Value{}, false
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
+		return reflect.Value{}, false
+	}
+	return rv, true
+}
+
 // buildWhereFromStruct converts a WhereInput struct to SQL clause + args.
-// It processes exported pointer fields using their type to detect StringFilter, NumberFilter, etc.
-func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (string, []interface{}) {
+func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (string, []interface{}, error) {
+	return c.buildWhereFromStructWithContext(v, c.ModelName, argOffset, "", "", "")
+}
+
+func (c *TableClient[T]) buildWhereFromStructWithContext(v reflect.Value, modelName string, argOffset int, prefix string, selfRef string, colPrefix string) (string, []interface{}, error) {
 	typ := v.Type()
 	var parts []string
 	var args []interface{}
 
-	pHFunc := func(n int) string { return c.ph(n) }
+	pHFunc := func(n int) string { return c.ph(argOffset + n - 1) }
 
 	for i := 0; i < v.NumField(); i++ {
 		field := typ.Field(i)
@@ -904,8 +1212,14 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 		if name == "AND" && fv.Kind() == reflect.Slice && !fv.IsNil() {
 			var subParts []string
 			for j := 0; j < fv.Len(); j++ {
-				sub, subArgs := c.buildWhereFromStruct(fv.Index(j), argOffset+len(args))
-				if sub != "" { subParts = append(subParts, sub); args = append(args, subArgs...) }
+				sub, subArgs, err := c.buildWhereFromStructWithContext(fv.Index(j), modelName, argOffset+len(args), fmt.Sprintf("%sAND%d_", prefix, j), selfRef, colPrefix)
+				if err != nil {
+					return "", nil, err
+				}
+				if sub != "" {
+					subParts = append(subParts, sub)
+					args = append(args, subArgs...)
+				}
 			}
 			if len(subParts) > 0 { parts = append(parts, "("+strings.Join(subParts, " AND ")+")") }
 			continue
@@ -913,15 +1227,25 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 		if name == "OR" && fv.Kind() == reflect.Slice && !fv.IsNil() {
 			var subParts []string
 			for j := 0; j < fv.Len(); j++ {
-				sub, subArgs := c.buildWhereFromStruct(fv.Index(j), argOffset+len(args))
-				if sub == "" { sub = "1=1" }; subParts = append(subParts, sub); args = append(args, subArgs...)
+				sub, subArgs, err := c.buildWhereFromStructWithContext(fv.Index(j), modelName, argOffset+len(args), fmt.Sprintf("%sOR%d_", prefix, j), selfRef, colPrefix)
+				if err != nil {
+					return "", nil, err
+				}
+				if sub == "" { sub = "1=1" }
+				subParts = append(subParts, sub)
+				args = append(args, subArgs...)
 			}
 			if len(subParts) > 0 { parts = append(parts, "("+strings.Join(subParts, " OR ")+")") } else { parts = append(parts, "1=0") }
 			continue
 		}
 		if name == "NOT" && fv.Kind() == reflect.Ptr && !fv.IsNil() {
-			sub, subArgs := c.buildWhereFromStruct(fv.Elem(), argOffset+len(args))
-			if sub == "" { sub = "1=1" }; parts = append(parts, "NOT ("+sub+")"); args = append(args, subArgs...)
+			sub, subArgs, err := c.buildWhereFromStructWithContext(fv.Elem(), modelName, argOffset+len(args), prefix+"NOT_", selfRef, colPrefix)
+			if err != nil {
+				return "", nil, err
+			}
+			if sub == "" { sub = "1=1" }
+			parts = append(parts, "NOT ("+sub+")")
+			args = append(args, subArgs...)
 			continue
 		}
 
@@ -929,8 +1253,134 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 			continue
 		}
 
-		col := c.quoteName(c.toSnakeCase(name))
 		elem := fv.Elem()
+		if lrf, ok := elem.Interface().(listRelationFilterMarker); ok {
+			rel, exists := resolveModelRelation(modelName, name)
+			if !exists {
+				return "", nil, fmt.Errorf("relation metadata not found for '%s' on '%s'", name, modelName)
+			}
+			if rel.RelationType != "many" {
+				return "", nil, fmt.Errorf("relation '%s' on '%s' is to-one and cannot use ListRelationFilter", name, modelName)
+			}
+			childTable := c.quoteTableName(resolveModelTable(rel.ModelName))
+			childKey, parentKey := resolveRelationKeys(modelName, rel)
+			childCol := c.quoteName(childKey)
+			parentCol := c.quoteName(parentKey)
+			parentRef := c.quoteTableName(resolveModelTable(modelName)) + "."
+			if selfRef != "" {
+				parentRef = selfRef + "."
+			}
+			someTarget, noneTarget, everyTarget := lrf.rawListRelationTargets()
+			relSnake := c.toSnakeCase(name)
+			for _, item := range []struct {
+				op     string
+				target interface{}
+			}{
+				{"some", someTarget},
+				{"none", noneTarget},
+				{"every", everyTarget},
+			} {
+				nestedVal, present := isPtrTargetPresent(item.target)
+				if !present {
+					continue
+				}
+				if nestedVal.Kind() != reflect.Struct {
+					return "", nil, fmt.Errorf("relation filter '%s.%s' must contain a WhereInput struct", name, item.op)
+				}
+				nextPrefix := prefix + relSnake + "_" + item.op + "_"
+				childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_"+item.op)
+				correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+				inner, subArgs, err := c.buildWhereFromStructWithContext(nestedVal, rel.ModelName, argOffset+len(args), nextPrefix, childAlias, childAlias+".")
+				if err != nil {
+					return "", nil, err
+				}
+				args = append(args, subArgs...)
+				switch item.op {
+				case "some":
+					innerClause := ""
+					if inner != "" { innerClause = " AND (" + inner + ")" }
+					parts = append(parts, fmt.Sprintf("EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+				case "none":
+					innerClause := ""
+					if inner != "" { innerClause = " AND (" + inner + ")" }
+					parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+				case "every":
+					violatedWhere := " AND 1=0"
+					if inner != "" { violatedWhere = " AND NOT (" + inner + ")" }
+					parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, violatedWhere))
+				}
+			}
+			continue
+		}
+
+		if rf, ok := elem.Interface().(relationFilterMarker); ok {
+			rel, exists := resolveModelRelation(modelName, name)
+			if !exists {
+				return "", nil, fmt.Errorf("relation metadata not found for '%s' on '%s'", name, modelName)
+			}
+			if rel.RelationType != "one" {
+				return "", nil, fmt.Errorf("relation '%s' on '%s' is to-many and cannot use RelationFilter", name, modelName)
+			}
+			isTarget, isNull, isNotTarget, isNotNull := rf.rawRelationTargets()
+			isVal, hasIs := isPtrTargetPresent(isTarget)
+			isNotVal, hasIsNot := isPtrTargetPresent(isNotTarget)
+			if hasIs && isNull {
+				return "", nil, fmt.Errorf("relation filter '%s' cannot set both Is and IsNull", name)
+			}
+			if hasIsNot && isNotNull {
+				return "", nil, fmt.Errorf("relation filter '%s' cannot set both IsNot and IsNotNull", name)
+			}
+			childTable := c.quoteTableName(resolveModelTable(rel.ModelName))
+			childKey, parentKey := resolveRelationKeys(modelName, rel)
+			childCol := c.quoteName(childKey)
+			parentCol := c.quoteName(parentKey)
+			parentRef := c.quoteTableName(resolveModelTable(modelName)) + "."
+			if selfRef != "" {
+				parentRef = selfRef + "."
+			}
+			relSnake := c.toSnakeCase(name)
+			if hasIs {
+				if isVal.Kind() != reflect.Struct {
+					return "", nil, fmt.Errorf("relation filter '%s.is' must contain a WhereInput struct", name)
+				}
+				childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_is")
+				correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+				inner, subArgs, err := c.buildWhereFromStructWithContext(isVal, rel.ModelName, argOffset+len(args), prefix+relSnake+"_is_", childAlias, childAlias+".")
+				if err != nil {
+					return "", nil, err
+				}
+				args = append(args, subArgs...)
+				innerClause := ""
+				if inner != "" { innerClause = " AND (" + inner + ")" }
+				parts = append(parts, fmt.Sprintf("EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+			} else if isNull {
+				childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_is")
+				correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+				parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s)", childTable, childAlias, correlation))
+			}
+			if hasIsNot {
+				if isNotVal.Kind() != reflect.Struct {
+					return "", nil, fmt.Errorf("relation filter '%s.isNot' must contain a WhereInput struct", name)
+				}
+				childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_isNot")
+				correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+				inner, subArgs, err := c.buildWhereFromStructWithContext(isNotVal, rel.ModelName, argOffset+len(args), prefix+relSnake+"_isNot_", childAlias, childAlias+".")
+				if err != nil {
+					return "", nil, err
+				}
+				args = append(args, subArgs...)
+				innerClause := ""
+				if inner != "" { innerClause = " AND (" + inner + ")" }
+				parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+			} else if isNotNull {
+				childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_isNot")
+				correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+				parts = append(parts, fmt.Sprintf("EXISTS (SELECT 1 FROM %s AS %s WHERE %s)", childTable, childAlias, correlation))
+			}
+			continue
+		}
+
+		col := colPrefix + c.quoteName(c.toSnakeCase(name))
 		typeName := field.Type.Elem().Name()
 
 		switch typeName {
@@ -949,6 +1399,11 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 			clause, newArgs := buildIntFilter(col, &filter, args, pHFunc)
 			if clause != "" { parts = append(parts, clause) }
 			args = newArgs
+		case "BoolFilter":
+			filter := elem.Interface().(BoolFilter)
+			clause, newArgs := buildBoolFilter(col, &filter, args, pHFunc)
+			if clause != "" { parts = append(parts, clause) }
+			args = newArgs
 		case "DateTimeFilter":
 			filter := elem.Interface().(DateTimeFilter)
 			clause, newArgs := buildDateTimeFilter(col, &filter, args, pHFunc)
@@ -956,20 +1411,25 @@ func (c *TableClient[T]) buildWhereFromStruct(v reflect.Value, argOffset int) (s
 			args = newArgs
 		case "bool":
 			args = append(args, elem.Bool())
-			parts = append(parts, col+" = "+c.ph(argOffset+len(args)))
+			parts = append(parts, col+" = "+pHFunc(len(args)))
 		case "string":
 			args = append(args, elem.String())
-			parts = append(parts, col+" = "+c.ph(argOffset+len(args)))
+			parts = append(parts, col+" = "+pHFunc(len(args)))
 		case "int", "int64":
 			args = append(args, elem.Int())
-			parts = append(parts, col+" = "+c.ph(argOffset+len(args)))
+			parts = append(parts, col+" = "+pHFunc(len(args)))
 		case "float64":
 			args = append(args, elem.Float())
-			parts = append(parts, col+" = "+c.ph(argOffset+len(args)))
+			parts = append(parts, col+" = "+pHFunc(len(args)))
+		case "Time":
+			args = append(args, elem.Interface())
+			parts = append(parts, col+" = "+pHFunc(len(args)))
+		default:
+			return "", nil, fmt.Errorf("unsupported filter field type '%s' for '%s'", field.Type.String(), name)
 		}
 	}
 
-	return strings.Join(parts, " AND "), args
+	return strings.Join(parts, " AND "), args, nil
 }
 
 // VectorSearchOptions contains options for vector similarity queries.
@@ -996,7 +1456,14 @@ func (c *TableClient[T]) VectorSearch(ctx context.Context, vector []float64, opt
 		whereArgs = opts[0].Where
 	}
 
-	whereCl, _, _, _, _, whereQueryArgs := c.parseArgs(whereArgs)
+	whereOffset := 1
+	if c.Dialect == DialectPostgres {
+		whereOffset = 2
+	}
+	whereCl, _, _, _, _, whereQueryArgs, err := c.parseArgsWithOffset(whereArgs, whereOffset)
+	if err != nil {
+		return nil, err
+	}
 	dim := len(vector)
 	vecBytes, _ := json.Marshal(vector)
 	vecStr := string(vecBytes)
@@ -1256,16 +1723,34 @@ func findFieldByDbTag(val reflect.Value, dbTag string) reflect.Value {
 	return reflect.Value{}
 }
 
+func goToSnakeCase(s string) string {
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	var res strings.Builder
+	res.Grow(len(runes) + 4)
+	for i, r := range runes {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				prev := runes[i-1]
+				hasNextLower := i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z'
+				prevIsUpper := prev >= 'A' && prev <= 'Z'
+				if prev != '_' && (!prevIsUpper || hasNextLower) {
+					res.WriteByte('_')
+				}
+			}
+			res.WriteRune(r + ('a' - 'A'))
+		} else {
+			res.WriteRune(r)
+		}
+	}
+	return res.String()
+}
+
 // toSnakeCase converts CamelCase to snake_case for column name resolution.
 func (c *TableClient[T]) toSnakeCase(s string) string {
-	var res []rune
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			res = append(res, '_')
-		}
-		res = append(res, []rune(strings.ToLower(string(r)))...)
-	}
-	return string(res)
+	return goToSnakeCase(s)
 }
 
 // Ensure unused imports are referenced

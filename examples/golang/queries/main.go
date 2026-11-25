@@ -369,13 +369,22 @@ func main() {
 		fmt.Printf("    - Order %s ($%d) belongs to: %s (%s)\n", o.Id, o.Total, name, owner.Email)
 	}
 
-	// Correlated EXISTS relation filter
-	usersWithBigOrders, err := client.User.QueryRaw(ctx,
-		"SELECT * FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id AND orders.total >= ?)",
-		400,
-	)
+	// Typed correlated EXISTS/NOT EXISTS relation filters (ListRelationFilter & RelationFilter)
+	usersWithBigOrders, err := client.User.FindMany(ctx, &an5.UserFindManyArgs{
+		Where: &an5.UserWhereInput{
+			Orders: &an5.ListRelationFilter[an5.OrderWhereInput]{
+				Some: &an5.OrderWhereInput{
+					Total: &an5.IntFilter{Gte: an5.IntPtr(400)},
+				},
+			},
+		},
+		OrderBy: &an5.UserOrderByInput{Name: an5.SortOrderPtr(an5.SortOrderAsc)},
+	})
 	if err != nil {
 		panic(err)
+	}
+	if len(usersWithBigOrders) != 1 || usersWithBigOrders[0].Id != "u_alice" {
+		panic(fmt.Sprintf("expected u_alice for Orders.Some >= 400, got %+v", usersWithBigOrders))
 	}
 	var bigOrderUserNames []string
 	for _, u := range usersWithBigOrders {
@@ -383,7 +392,83 @@ func main() {
 			bigOrderUserNames = append(bigOrderUserNames, *u.Name)
 		}
 	}
-	fmt.Printf("  ✓ Relation filter (orders.some.total >= 400): found %s\n\n", strings.Join(bigOrderUserNames, ", "))
+	fmt.Printf("  ✓ Relation filter (Orders.Some.Total >= 400): found %s\n", strings.Join(bigOrderUserNames, ", "))
+
+	usersWithAllBigOrders, err := client.User.FindMany(ctx, &an5.UserFindManyArgs{
+		Where: &an5.UserWhereInput{
+			IsActive: &an5.BoolFilter{Not: an5.BoolPtr(false)},
+			Orders: &an5.ListRelationFilter[an5.OrderWhereInput]{
+				Some:  &an5.OrderWhereInput{Status: &an5.StringFilter{Equals: an5.StringPtr("paid")}},
+				Every: &an5.OrderWhereInput{Total: &an5.IntFilter{Gte: an5.IntPtr(80)}},
+			},
+		},
+		OrderBy: &an5.UserOrderByInput{Name: an5.SortOrderPtr(an5.SortOrderAsc)},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(usersWithAllBigOrders) != 2 {
+		panic(fmt.Sprintf("expected 2 users with Some(paid)+Every(>=80), got %d", len(usersWithAllBigOrders)))
+	}
+	fmt.Printf("  ✓ Combined relation filter (Orders.Some=paid & Orders.Every>=80 & IsActive.Not=false): %d user(s)\n", len(usersWithAllBigOrders))
+
+	usersWithoutPaidOrders, err := client.User.FindMany(ctx, &an5.UserFindManyArgs{
+		Where: &an5.UserWhereInput{
+			Orders: &an5.ListRelationFilter[an5.OrderWhereInput]{
+				None: &an5.OrderWhereInput{Status: &an5.StringFilter{Equals: an5.StringPtr("paid")}},
+			},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(usersWithoutPaidOrders) != 3 {
+		panic(fmt.Sprintf("expected 3 users with Orders.None=paid, got %d", len(usersWithoutPaidOrders)))
+	}
+	fmt.Printf("  ✓ Relation filter (Orders.None=paid): %d user(s)\n", len(usersWithoutPaidOrders))
+
+	aliceOrders, err := client.Order.FindMany(ctx, &an5.OrderFindManyArgs{
+		Where: &an5.OrderWhereInput{
+			User: &an5.RelationFilter[an5.UserWhereInput]{
+				Is: &an5.UserWhereInput{Email: &an5.StringFilter{Equals: an5.StringPtr("alice@example.com")}},
+			},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(aliceOrders) != 1 || aliceOrders[0].Id != "o_a1" {
+		panic(fmt.Sprintf("expected 1 order belonging to alice via RelationFilter.Is, got %+v", aliceOrders))
+	}
+	nonAliceOrders, err := client.Order.FindMany(ctx, &an5.OrderFindManyArgs{
+		Where: &an5.OrderWhereInput{
+			User: &an5.RelationFilter[an5.UserWhereInput]{
+				IsNot: &an5.UserWhereInput{Email: &an5.StringFilter{Equals: an5.StringPtr("alice@example.com")}},
+			},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(nonAliceOrders) != 3 {
+		panic(fmt.Sprintf("expected 3 orders via RelationFilter.IsNot, got %d", len(nonAliceOrders)))
+	}
+	fmt.Printf("  ✓ To-one relation filters (Order.User.Is / IsNot): alice=%d, non-alice=%d\n", len(aliceOrders), len(nonAliceOrders))
+
+	if _, badErr := client.Order.FindMany(ctx, &an5.OrderFindManyArgs{
+		Where: &an5.OrderWhereInput{
+			User: &an5.RelationFilter[an5.UserWhereInput]{
+				Is:     &an5.UserWhereInput{},
+				IsNull: true,
+			},
+		},
+	}); badErr == nil {
+		panic("expected error for contradictory RelationFilter{Is, IsNull}")
+	}
+	if _, badErr := client.User.FindMany(ctx, "invalid-non-struct"); badErr == nil {
+		panic("expected error for non-struct FindMany args")
+	}
+	fmt.Print("  ✓ Strict validation: rejected contradictory RelationFilter & non-struct args\n\n")
 
 	// ───────────────────────────────────────────────────────────────────────────
 	// 7. MUTATIONS: update, Field Math, upsert, and delete
