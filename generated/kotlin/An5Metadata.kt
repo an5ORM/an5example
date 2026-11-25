@@ -40,10 +40,10 @@ object An5Metadata {
     /** Model name to its relations, keyed by relation name. */
     val relationMap: Map<String, Map<String, Map<String, String>>> = linkedMapOf(
         "Order" to linkedMapOf(
-            "user" to relation("User", "", "userId", "id")
+            "user" to relation("User", "one", "userId", "id")
         ),
         "User" to linkedMapOf(
-            "orders" to relation("Order", "", "userId", "id")
+            "orders" to relation("Order", "many", "userId", "id")
         ),
     )
 

@@ -45,7 +45,7 @@ public final class An5Metadata {
     Map<String, Map<String, String>> orderRelations =
         new LinkedHashMap<String, Map<String, String>>();
     orderRelations.put("user",
-        relation("User", "", "userId", "id"));
+        relation("User", "one", "userId", "id"));
     relations.put("Order", orderRelations);
     tables.put("User", "users");
     fields.put("User", Arrays.asList(
@@ -60,7 +60,7 @@ public final class An5Metadata {
     Map<String, Map<String, String>> userRelations =
         new LinkedHashMap<String, Map<String, String>>();
     userRelations.put("orders",
-        relation("Order", "", "userId", "id"));
+        relation("Order", "many", "userId", "id"));
     relations.put("User", userRelations);
 
     MODEL_TO_TABLE = Collections.unmodifiableMap(tables);
@@ -93,10 +93,10 @@ public final class An5Metadata {
   }
 
   private static Map<String, String> relation(
-      String modelName, String relationName, String foreignKey, String localKey) {
+      String modelName, String relationType, String foreignKey, String localKey) {
     Map<String, String> relation = new LinkedHashMap<String, String>();
     relation.put("modelName", modelName);
-    relation.put("relationType", relationName);
+    relation.put("relationType", relationType);
     relation.put("foreignKey", foreignKey);
     relation.put("localKey", localKey);
     return relation;

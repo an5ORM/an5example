@@ -86,8 +86,7 @@ fun main() {
             check(strong.size == 1) { "expected one high scorer, got ${strong.size}" }
 
             // ── Read: nested AND/OR through the typed where ────────────────────
-            // A filter the adapter cannot read is not an error, it is an empty WHERE, which
-            // matches every row — so these counts are what prove the nested clauses survived.
+            // These counts prove both branches of the typed AND/OR group survived.
             val active = An5Orm.UserWhere(isActive = An5Orm.BoolFilter.`is`(true))
             val nestedAnd = db.user.findMany(An5Orm.UserWhere.andOf(active, highScore).build())
             println("active users with score >= 100: ${nestedAnd.size}")
@@ -115,14 +114,50 @@ fun main() {
             }
             check(loaded.orders.first().total != null) { "the included rows were not mapped" }
 
-            // ── Read: relation filter on the child side ────────────────────────
+            // ── Read: typed relation filters & to-one include ──────────────────
+            val paidOrderWhere = An5Orm.OrderWhere(status = An5Orm.StringFilter.`is`("paid"))
+            val matchedUsers = db.user.findMany(
+                An5Orm.UserWhere(orders = An5Orm.ListRelationFilter.some(paidOrderWhere)).build()
+            )
+            check(matchedUsers.size == 1 && matchedUsers.first().id == aliceId) {
+                "expected Alice to have a paid order"
+            }
+
+            val withoutPaid = db.user.findMany(
+                An5Orm.UserWhere(orders = An5Orm.ListRelationFilter.none(paidOrderWhere)).build()
+            )
+            check(withoutPaid.size == 1 && withoutPaid.first().email == "bob@example.com") {
+                "expected Bob to have no paid orders"
+            }
+
+            val highValueOrder = An5Orm.OrderWhere(total = An5Orm.NumberFilter.atLeast(50))
+            val allHighValueUsers = db.user.findMany(
+                An5Orm.UserWhere(orders = An5Orm.ListRelationFilter.every(highValueOrder)).build()
+            )
+            check(allHighValueUsers.size == 2) {
+                "expected Alice (all >= 50) and Bob (no orders), got ${allHighValueUsers.size}"
+            }
+
+            val aliceAuthorWhere = An5Orm.UserWhere(email = An5Orm.StringFilter.`is`("alice@example.com"))
             val aliceOrders = db.order.findMany {
-                where(mapOf("userId" to mapOf("equals" to aliceId)))
+                where(An5Orm.OrderWhere(user = An5Orm.RelationFilter.`is`(aliceAuthorWhere)).build())
                 orderBy("total", Sort.DESC)
+                include(mapOf("user" to true))
             }
             println("alice orders by total: ${aliceOrders.size}")
             check(aliceOrders.size == 2) { "relation filter returned ${aliceOrders.size}" }
             check(aliceOrders.first().total == 250) { "orderBy total desc was not applied" }
+            check(aliceOrders.first().user?.email == "alice@example.com") {
+                "to-one include did not populate user"
+            }
+
+            val rejectedBogus = try {
+                db.user.findMany(mapOf("email" to mapOf("bogus" to "alice@example.com")))
+                false
+            } catch (_: IllegalArgumentException) {
+                true
+            }
+            check(rejectedBogus) { "expected unsupported filter operator to throw IllegalArgumentException" }
 
             // ── Aggregate ──────────────────────────────────────────────────────
             val stats = db.order.aggregate {

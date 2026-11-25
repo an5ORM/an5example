@@ -128,6 +128,41 @@ object An5Orm {
         return map
     }
 
+    /** Common interface implemented by generated model `WHERE` builders. */
+    interface WhereBuilder {
+        fun build(): Where
+    }
+
+    /** A filter on a to-many relation (`some`, `none`, `every`). */
+    class ListRelationFilter<T : WhereBuilder> private constructor(
+        private val operators: Map<String, Any?> = emptyMap(),
+    ) {
+        fun some(filter: T? = null) = ListRelationFilter<T>(operators + ("some" to (filter?.build() ?: emptyMap<String, Any?>())))
+        fun none(filter: T? = null) = ListRelationFilter<T>(operators + ("none" to (filter?.build() ?: emptyMap<String, Any?>())))
+        fun every(filter: T) = ListRelationFilter<T>(operators + ("every" to filter.build()))
+        fun build(): Where = LinkedHashMap(operators)
+
+        companion object {
+            fun <T : WhereBuilder> some(filter: T? = null) = ListRelationFilter<T>().some(filter)
+            fun <T : WhereBuilder> none(filter: T? = null) = ListRelationFilter<T>().none(filter)
+            fun <T : WhereBuilder> every(filter: T) = ListRelationFilter<T>().every(filter)
+        }
+    }
+
+    /** A filter on a to-one relation (`is`, `isNot`). */
+    class RelationFilter<T : WhereBuilder> private constructor(
+        private val operators: Map<String, Any?> = emptyMap(),
+    ) {
+        fun `is`(filter: T?) = RelationFilter<T>(operators + ("is" to filter?.build()))
+        fun isNot(filter: T?) = RelationFilter<T>(operators + ("isNot" to filter?.build()))
+        fun build(): Where = LinkedHashMap(operators)
+
+        companion object {
+            fun <T : WhereBuilder> `is`(filter: T?) = RelationFilter<T>().`is`(filter)
+            fun <T : WhereBuilder> isNot(filter: T?) = RelationFilter<T>().isNot(filter)
+        }
+    }
+
     /** A `WHERE` for Order. Unset filters are left out. */
     data class OrderWhere(
         val and: List<OrderWhere>? = null,
@@ -138,9 +173,10 @@ object An5Orm {
         val total: NumberFilter? = null,
         val status: StringFilter? = null,
         val createdAt: DateFilter? = null,
-    ) {
+        val user: RelationFilter<UserWhere>? = null,
+    ) : WhereBuilder {
         /** The filter tree as the runtime reads it. */
-        fun build(): Where = operatorMap {
+        override fun build(): Where = operatorMap {
             and?.let { put("AND", it.map { clause -> clause.build() }) }
             or?.let { put("OR", it.map { clause -> clause.build() }) }
             not?.let { put("NOT", it.map { clause -> clause.build() }) }
@@ -149,6 +185,7 @@ object An5Orm {
             total?.let { put("total", it.build()) }
             status?.let { put("status", it.build()) }
             createdAt?.let { put("createdAt", it.build()) }
+            user?.let { put("user", it.build()) }
         }
 
         companion object {
@@ -187,9 +224,10 @@ object An5Orm {
         val score: NumberFilter? = null,
         val embedding: StringFilter? = null,
         val createdAt: DateFilter? = null,
-    ) {
+        val orders: ListRelationFilter<OrderWhere>? = null,
+    ) : WhereBuilder {
         /** The filter tree as the runtime reads it. */
-        fun build(): Where = operatorMap {
+        override fun build(): Where = operatorMap {
             and?.let { put("AND", it.map { clause -> clause.build() }) }
             or?.let { put("OR", it.map { clause -> clause.build() }) }
             not?.let { put("NOT", it.map { clause -> clause.build() }) }
@@ -200,6 +238,7 @@ object An5Orm {
             score?.let { put("score", it.build()) }
             embedding?.let { put("embedding", it.build()) }
             createdAt?.let { put("createdAt", it.build()) }
+            orders?.let { put("orders", it.build()) }
         }
 
         companion object {

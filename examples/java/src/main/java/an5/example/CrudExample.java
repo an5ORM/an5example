@@ -5,7 +5,10 @@ import an5.adapters.An5Query;
 import an5.client.An5Config;
 import an5.client.An5DbContext;
 import an5.client.An5OrmTypes.BoolFilter;
+import an5.client.An5OrmTypes.ListRelationFilter;
 import an5.client.An5OrmTypes.NumberFilter;
+import an5.client.An5OrmTypes.OrderWhere;
+import an5.client.An5OrmTypes.RelationFilter;
 import an5.client.An5OrmTypes.StringFilter;
 import an5.client.An5OrmTypes.UserWhere;
 import an5.client.Order;
@@ -121,8 +124,7 @@ public final class CrudExample {
         check(strong.size() == 1, "expected one high scorer, got " + strong.size());
 
         // ── Read: nested AND/OR through the typed where ────────────────────────
-        // A filter the adapter cannot read is not an error, it is an empty WHERE, which
-        // matches every row — so these counts are what prove the nested clauses survived.
+        // These counts prove both branches of the typed AND/OR group survived.
         UserWhere active = new UserWhere();
         active.IsActive = BoolFilter.is(true);
         UserWhere aliceName = new UserWhere();
@@ -158,16 +160,59 @@ public final class CrudExample {
             loaded.getOrders().get(0).getTotal() != null,
             "the included rows were not mapped onto the model");
 
-        // ── Read: relation filter on the child side ────────────────────────────
+        // ── Read: typed relation filters & to-one include ──────────────────────
+        OrderWhere paidOrderWhere = new OrderWhere();
+        paidOrderWhere.Status = StringFilter.is("paid");
+
+        UserWhere usersWithPaidOrders = new UserWhere();
+        usersWithPaidOrders.Orders = ListRelationFilter.some(paidOrderWhere);
+        List<User> matchedUsers = db.getUser().findMany(new An5Query().where(usersWithPaidOrders.toMap()));
+        check(
+            matchedUsers.size() == 1 && alice.getId().equals(matchedUsers.get(0).getId()),
+            "expected Alice to have a paid order");
+
+        UserWhere usersWithoutPaidOrders = new UserWhere();
+        usersWithoutPaidOrders.Orders = ListRelationFilter.none(paidOrderWhere);
+        List<User> withoutPaid = db.getUser().findMany(new An5Query().where(usersWithoutPaidOrders.toMap()));
+        check(
+            withoutPaid.size() == 1 && "bob@example.com".equals(withoutPaid.get(0).getEmail()),
+            "expected Bob to have no paid orders");
+
+        OrderWhere highValueOrder = new OrderWhere();
+        highValueOrder.Total = NumberFilter.atLeast(50);
+        UserWhere everyHighValue = new UserWhere();
+        everyHighValue.Orders = ListRelationFilter.every(highValueOrder);
+        List<User> allHighValueUsers = db.getUser().findMany(new An5Query().where(everyHighValue.toMap()));
+        check(
+            allHighValueUsers.size() == 2,
+            "expected Alice (all >= 50) and Bob (no orders), got " + allHighValueUsers.size());
+
+        UserWhere aliceAuthorWhere = new UserWhere();
+        aliceAuthorWhere.Email = StringFilter.is("alice@example.com");
+        OrderWhere ordersByAlice = new OrderWhere();
+        ordersByAlice.User = RelationFilter.is(aliceAuthorWhere);
         List<Order> aliceOrders =
             db.getOrder()
                 .findMany(
                     new An5Query()
-                        .where(filter("userId", op("equals", alice.getId())))
-                        .orderBy("total", "desc"));
+                        .where(ordersByAlice.toMap())
+                        .orderBy("total", "desc")
+                        .include(filter("user", Boolean.TRUE)));
         System.out.println("alice orders by total: " + aliceOrders.size());
         check(aliceOrders.size() == 2, "relation filter returned " + aliceOrders.size());
         check(aliceOrders.get(0).getTotal() == 250, "orderBy total desc was not applied");
+        check(
+            aliceOrders.get(0).getUser() != null
+                && "alice@example.com".equals(aliceOrders.get(0).getUser().getEmail()),
+            "to-one include did not populate user");
+
+        boolean rejectedBogusOp = false;
+        try {
+          db.getUser().findMany(new An5Query().where(filter("email", op("bogus", "alice@example.com"))));
+        } catch (IllegalArgumentException expected) {
+          rejectedBogusOp = true;
+        }
+        check(rejectedBogusOp, "expected unsupported filter operator to throw IllegalArgumentException");
 
         // ── Aggregate ──────────────────────────────────────────────────────────
         Map<String, Object> stats =
