@@ -213,11 +213,102 @@ public static class QueriesExample
                 Console.WriteLine($"    - Order {o.Id} (${o.Total}) belongs to: {owner?.Name} ({owner?.Email})");
             }
 
-            // Relation filter using EXISTS subquery
-            var usersWithBigOrders = db.User.FindMany(
-                "EXISTS (SELECT 1 FROM orders WHERE orders.userId = users.id AND orders.total >= 400)"
-            );
-            Console.WriteLine($"  ✓ Relation filter (orders.some.total >= 400): found {string.Join(", ", usersWithBigOrders.Select(u => u.Name))}\n");
+            // Typed correlated EXISTS/NOT EXISTS relation filters (ListRelationFilter & RelationFilter)
+            var usersWithBigOrders = db.User.FindMany(new UserFindManyArgs
+            {
+                Where = new UserWhereInput
+                {
+                    Orders = new ListRelationFilter<OrderWhereInput>
+                    {
+                        Some = new OrderWhereInput { Total = new IntFilter { Gte = 400 } },
+                    },
+                },
+                OrderBy = new UserOrderByInput { Name = "asc" },
+            });
+            if (usersWithBigOrders.Count != 1 || usersWithBigOrders[0].Id != "u_alice")
+                throw new Exception($"Expected u_alice for Orders.Some >= 400, got {usersWithBigOrders.Count}");
+            Console.WriteLine($"  ✓ Relation filter (Orders.Some.Total >= 400): found {string.Join(", ", usersWithBigOrders.Select(u => u.Name))}");
+
+            var usersWithAllBigOrders = db.User.FindMany(new UserFindManyArgs
+            {
+                Where = new UserWhereInput
+                {
+                    IsActive = new BoolFilter { Not = false },
+                    Orders = new ListRelationFilter<OrderWhereInput>
+                    {
+                        Some = new OrderWhereInput { Status = new StringFilter { Equals = "paid" } },
+                        Every = new OrderWhereInput { Total = new IntFilter { Gte = 80 } },
+                    },
+                },
+                OrderBy = new UserOrderByInput { Name = "asc" },
+            });
+            if (usersWithAllBigOrders.Count != 2)
+                throw new Exception($"Expected 2 users with Some(paid) & Every(>=80), got {usersWithAllBigOrders.Count}");
+            Console.WriteLine($"  ✓ Combined relation filter (Orders.Some=paid & Orders.Every>=80 & IsActive.Not=false): {usersWithAllBigOrders.Count} user(s)");
+
+            var usersWithoutPaidOrders = db.User.FindMany(new UserFindManyArgs
+            {
+                Where = new UserWhereInput
+                {
+                    Orders = new ListRelationFilter<OrderWhereInput>
+                    {
+                        None = new OrderWhereInput { Status = new StringFilter { Equals = "paid" } },
+                    },
+                },
+            });
+            if (usersWithoutPaidOrders.Count != 3)
+                throw new Exception($"Expected 3 users with Orders.None=paid, got {usersWithoutPaidOrders.Count}");
+            Console.WriteLine($"  ✓ Relation filter (Orders.None=paid): {usersWithoutPaidOrders.Count} user(s)");
+
+            var aliceOrdersOnly = db.Order.FindMany(new OrderFindManyArgs
+            {
+                Where = new OrderWhereInput
+                {
+                    User = new RelationFilter<UserWhereInput>
+                    {
+                        Is = new UserWhereInput { Email = new StringFilter { Equals = "alice@example.com" } },
+                    },
+                },
+            });
+            var nonAliceOrdersOnly = db.Order.FindMany(new OrderFindManyArgs
+            {
+                Where = new OrderWhereInput
+                {
+                    User = new RelationFilter<UserWhereInput>
+                    {
+                        IsNot = new UserWhereInput { Email = new StringFilter { Equals = "alice@example.com" } },
+                    },
+                },
+            });
+            if (aliceOrdersOnly.Count != 1 || aliceOrdersOnly[0].Id != "o_a1" || nonAliceOrdersOnly.Count != 3)
+                throw new Exception($"Unexpected to-one relation filter counts: alice={aliceOrdersOnly.Count}, non-alice={nonAliceOrdersOnly.Count}");
+            Console.WriteLine($"  ✓ To-one relation filters (Order.User.Is / IsNot): alice={aliceOrdersOnly.Count}, non-alice={nonAliceOrdersOnly.Count}");
+
+            try
+            {
+                db.Order.FindMany(new OrderFindManyArgs
+                {
+                    Where = new OrderWhereInput { User = new RelationFilter<UserWhereInput> { Is = new UserWhereInput(), IsNull = true } },
+                });
+                throw new Exception("Expected ArgumentException for contradictory RelationFilter");
+            }
+            catch (ArgumentException) { }
+            try
+            {
+                db.User.FindMany(new UserFindManyArgs
+                {
+                    Where = new UserWhereInput { Email = new StringFilter { Contains = "alice", Mode = "invalid" } },
+                });
+                throw new Exception("Expected ArgumentException for invalid StringFilter.Mode");
+            }
+            catch (ArgumentException) { }
+            try
+            {
+                db.User.FindMany(999);
+                throw new Exception("Expected ArgumentException for non-args object");
+            }
+            catch (ArgumentException) { }
+            Console.WriteLine("  ✓ Strict validation: rejected contradictory RelationFilter, invalid Mode & bad args\n");
 
             // ───────────────────────────────────────────────────────────────────────────
             // 7. MUTATIONS: update, Field Math, upsert, and delete
