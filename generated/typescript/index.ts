@@ -8,8 +8,11 @@ import * as UserTypes from './User';
 
 export namespace An5 {
   export type SortOrder = BaseAn5.SortOrder;
+  export type QueryMode = BaseAn5.QueryMode;
   export type StringFilter = BaseAn5.StringFilter;
   export type StringNullableFilter = BaseAn5.StringNullableFilter;
+  export type ListRelationFilter<T> = BaseAn5.ListRelationFilter<T>;
+  export type RelationFilter<T> = BaseAn5.RelationFilter<T>;
   export type NumberFilter = BaseAn5.NumberFilter;
   export type NumberNullableFilter = BaseAn5.NumberNullableFilter;
   export type BooleanFilter = BaseAn5.BooleanFilter;

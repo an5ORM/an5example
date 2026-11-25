@@ -20,7 +20,7 @@ export type OrderWhereInput = {
   total?: number | An5.NumberFilter;
   status?: string | An5.StringNullableFilter | null;
   createdAt?: Date | string | An5.DateTimeFilter;
-  user?: UserWhereInput;
+  user?: An5.RelationFilter<UserWhereInput>;
 };
 
 export type OrderSelect = { id?: boolean; userId?: boolean; total?: boolean; status?: boolean; createdAt?: boolean; user?: boolean | UserFindManyArgs; _count?: boolean | { select?: { user?: boolean } }; };

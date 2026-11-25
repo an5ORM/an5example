@@ -107,6 +107,27 @@ async function runCrudSuite({ db, opts }) {
   assert.strictEqual(paidOrders.length, 1);
   assert.strictEqual(paidOrders[0].user.email, 'bob@example.com');
 
+  // To-one relation filters (is / isNot) and case-insensitive scalar filters.
+  const bobOrders = await db.order.findMany({
+    where: { user: { is: { name: 'Bob' } } },
+    orderBy: { total: 'asc' },
+  });
+  assert.deepStrictEqual(bobOrders.map((o) => o.total), [100, 250]);
+  const nonBobOrders = await db.order.findMany({
+    where: { user: { isNot: { name: 'Bob' } } },
+  });
+  assert.strictEqual(nonBobOrders.length, 0);
+
+  const insensitiveUsers = await db.user.findMany({
+    where: { email: { contains: 'ALICE', mode: 'insensitive' } },
+  });
+  assert.deepStrictEqual(insensitiveUsers.map((u) => u.name), ['Alice']);
+
+  // Strict runtime validation rejects unknown/mismatched operators and unknown fields.
+  await assert.rejects(() => db.user.findMany({ where: { email: { bogus: 'x' } } }), /Unknown filter operator 'bogus'/);
+  await assert.rejects(() => db.user.findMany({ where: { orders: { is: { status: 'paid' } } } }), /Unsupported relation filter operator 'is'/);
+  await assert.rejects(() => db.user.findMany({ where: { unknownField: 'x' } }), /Unknown field 'unknownField'/);
+
   // ── COUNT ──────────────────────────────────────────────────────────────────
   assert.strictEqual(await db.user.count(), 5);
   assert.strictEqual(await db.order.count({ where: { status: 'open' } }), 1);

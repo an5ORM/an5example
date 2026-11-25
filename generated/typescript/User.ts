@@ -24,7 +24,7 @@ export type UserWhereInput = {
   score?: number | An5.NumberFilter;
   embedding?: number[] | string | any | null;
   createdAt?: Date | string | An5.DateTimeFilter;
-  orders?: { some?: OrderWhereInput; none?: OrderWhereInput; every?: OrderWhereInput; };
+  orders?: An5.ListRelationFilter<OrderWhereInput>;
 };
 
 export type UserSelect = { id?: boolean; email?: boolean; name?: boolean; isActive?: boolean; score?: boolean; embedding?: boolean; createdAt?: boolean; orders?: boolean | OrderFindManyArgs; _count?: boolean | { select?: { orders?: boolean } }; };

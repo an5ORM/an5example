@@ -5,8 +5,11 @@ export namespace An5 {
   export const An5ClientKnownRequestError: typeof An5KnownError = An5KnownError;
   export type An5ClientKnownRequestError = An5KnownError;
   export type SortOrder = 'asc' | 'desc';
-  export type StringFilter = { equals?: string; in?: string[]; notIn?: string[]; lt?: string; lte?: string; gt?: string; gte?: string; contains?: string; startsWith?: string; endsWith?: string; not?: string | StringFilter; };
-  export type StringNullableFilter = { equals?: string | null; in?: (string | null)[]; notIn?: (string | null)[]; lt?: string; lte?: string; gt?: string; gte?: string; contains?: string; startsWith?: string; endsWith?: string; not?: string | StringNullableFilter | null; };
+  export type QueryMode = 'default' | 'insensitive';
+  export type StringFilter = { equals?: string; in?: string[]; notIn?: string[]; lt?: string; lte?: string; gt?: string; gte?: string; contains?: string; startsWith?: string; endsWith?: string; not?: string | StringFilter; mode?: QueryMode; };
+  export type StringNullableFilter = { equals?: string | null; in?: (string | null)[]; notIn?: (string | null)[]; lt?: string; lte?: string; gt?: string; gte?: string; contains?: string; startsWith?: string; endsWith?: string; not?: string | StringNullableFilter | null; mode?: QueryMode; };
+  export type ListRelationFilter<T> = { some?: T; none?: T; every?: T; };
+  export type RelationFilter<T> = { is?: T | null; isNot?: T | null; };
   export type NumberFilter = { equals?: number; in?: number[]; notIn?: number[]; lt?: number; lte?: number; gt?: number; gte?: number; not?: number | NumberFilter; };
   export type IntFieldUpdateOperationsInput = { set?: number; increment?: number; decrement?: number; multiply?: number; divide?: number; };
   export type FloatFieldUpdateOperationsInput = { set?: number; increment?: number; decrement?: number; multiply?: number; divide?: number; };

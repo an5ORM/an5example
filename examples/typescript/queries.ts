@@ -264,7 +264,14 @@ async function main(): Promise<void> {
   const usersWithBigOrders = await db.user.findMany({
     where: { orders: { some: { total: { gte: 400 } } } },
   });
-  console.log(`  ✓ Relation filter (orders.some.total >= 400): found ${usersWithBigOrders.map((u) => u.name).join(', ')}\n`);
+  console.log(`  ✓ Relation filter (orders.some.total >= 400): found ${usersWithBigOrders.map((u) => u.name).join(', ')}`);
+
+  // Typed to-one relation filter + case-insensitive string filter
+  const aliceOrdersTyped = await db.order.findMany({
+    where: { user: { is: { name: { contains: 'alice', mode: 'insensitive' } } } },
+  });
+  assert.strictEqual(aliceOrdersTyped.length, 1);
+  console.log(`  ✓ To-one relation filter (user.is.name insensitive): found ${aliceOrdersTyped.length} order(s)\n`);
 
   // ───────────────────────────────────────────────────────────────────────────
   // 7. MUTATIONS: update, Field Math, upsert, and delete
