@@ -79,6 +79,9 @@ public struct ModelClient<T> {
     /// One row per group, each carrying the group's count and aggregates.
     public func groupBy(_ aggregate: Aggregate) throws -> [Row] { try table.groupBy(aggregate) }
 
+    /// One row per group from a typed `GroupByBuilder`.
+    public func groupBy(_ builder: An5Orm.GroupByBuilder) throws -> [Row] { try table.groupBy(builder.build()) }
+
     /// The rows nearest a vector.
     public func vectorSearch(
         _ vector: [Double],
@@ -126,6 +129,9 @@ public struct ViewModelClient<T> {
 
     /// One row per group, each carrying the group's count and aggregates.
     public func groupBy(_ aggregate: Aggregate) throws -> [Row] { try client.groupBy(aggregate) }
+
+    /// One row per group from a typed `GroupByBuilder`.
+    public func groupBy(_ builder: An5Orm.GroupByBuilder) throws -> [Row] { try client.groupBy(builder.build()) }
 
     /// The rows nearest a vector.
     public func vectorSearch(

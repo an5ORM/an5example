@@ -136,6 +136,11 @@ func runExample() throws {
     try check(matching.count == 1, "expected one alice, got \(matching.count)")
     try check(matching.first?.email == "alice@example.com", "wrong row returned")
 
+    var ciAliceWhere = An5Orm.UserWhere()
+    ciAliceWhere.email = An5Orm.StringFilter.has("ALICE").insensitive()
+    let ciMatching = try db.user.findMany(filter: ciAliceWhere.build())
+    try check(ciMatching.count == 1, "expected case-insensitive contains to match Alice")
+
     // ── Read: typed number filter ─────────────────────────────────────────────
     var highScoreWhere = An5Orm.UserWhere()
     highScoreWhere.score = An5Orm.NumberFilter.atLeast(100)
@@ -231,6 +236,52 @@ func runExample() throws {
     print("orders stat: \(stats)")
     try check(aggregateNumber(stats["_count"]) == 2, "aggregate count was \(stats)")
     try check(aggregateNumber(stats["_sum_total"]) == 325, "aggregate sum was \(stats)")
+
+    var statusWhere = An5Orm.OrderWhere()
+    statusWhere.status = An5Orm.StringFilter().inList(["OPEN", "PAID"]).insensitive()
+    var orderHaving = An5Orm.OrderAggregateHaving()
+    var havingCount = An5Orm.OrderCountAggregateFilter()
+    havingCount._all = An5Orm.NumberFilter.atLeast(1)
+    orderHaving._count = havingCount
+    var havingSum = An5Orm.OrderNumericAggregateFilter()
+    havingSum.total = An5Orm.NumberFilter.atLeast(200)
+    orderHaving._sum = havingSum
+
+    let groupedOrders = try db.order.groupBy(
+        An5Orm.OrderGroupBy()
+            .by("status")
+            .where(statusWhere)
+            .having(orderHaving)
+            .count("_all", "status")
+            .sum("total")
+            .orderBy(An5Orm.OrderOrderBy().asc("status"))
+    )
+    try check(
+        groupedOrders.count == 1 && (groupedOrders.first?["status"] as? String) == "open",
+        "expected typed GroupBy Having to keep only 'open', got \(groupedOrders)"
+    )
+    try check(
+        aggregateNumber(groupedOrders.first?["_count_status"]) == 1,
+        "expected per-field _count_status == 1"
+    )
+
+    let skippedGroups = try db.order.groupBy(
+        An5Orm.OrderGroupBy().by("status").orderBy([["status": "asc"]]).skip(1)
+    )
+    try check(
+        skippedGroups.count == 1 && (skippedGroups.first?["status"] as? String) == "paid",
+        "expected SQLite offset-only GroupBy skip(1) to return 'paid', got \(skippedGroups)"
+    )
+
+    var rejectedUngroupedHaving = false
+    var badHaving = An5Orm.OrderAggregateHaving()
+    badHaving.total = An5Orm.NumberFilter.atLeast(100)
+    do {
+        _ = try db.order.groupBy(An5Orm.OrderGroupBy().by("status").having(badHaving))
+    } catch An5Error.invalidQuery {
+        rejectedUngroupedHaving = true
+    }
+    try check(rejectedUngroupedHaving, "expected ungrouped scalar in having to throw An5Error.invalidQuery")
 
     // ── Count ─────────────────────────────────────────────────────────────────
     let users = try db.user.count()
