@@ -566,7 +566,32 @@ func main() {
 		}
 		fmt.Printf("    - Status '%v': count=%v, sum=$%v\n", g["status"], g["_count"], sumVal)
 	}
-	fmt.Println()
+
+	// Typed GroupByArgs with HAVING + per-field Count + case-insensitive StringFilter
+	highValueGroups, err := client.Orders.GroupBy(ctx, an5.OrderGroupByArgs{
+		By: []string{"status"},
+		Having: &an5.OrderAggregateHavingInput{
+			Count: &an5.OrderCountAggregateFilter{All: &an5.IntFilter{Gte: an5.IntPtr(1)}},
+			Sum:   &an5.OrderNumericAggregateFilter{Total: &an5.NumberFilter{Gte: an5.Float64Ptr(500)}},
+		},
+		Count: []string{"_all", "user_id"},
+		Sum:   []string{"total"},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(highValueGroups) != 1 || highValueGroups[0]["status"] != "paid" {
+		panic(fmt.Sprintf("unexpected typed GroupBy HAVING result: %#v", highValueGroups))
+	}
+	ciAlice, err := client.User.FindMany(ctx, an5.UserFindManyArgs{
+		Where: &an5.UserWhereInput{
+			Name: &an5.StringFilter{Contains: an5.StringPtr("alice"), Mode: "insensitive"},
+		},
+	})
+	if err != nil || len(ciAlice) != 1 || ciAlice[0].Id != alice.Id {
+		panic(fmt.Sprintf("unexpected insensitive StringFilter result: len=%d err=%v", len(ciAlice), err))
+	}
+	fmt.Printf("  ✓ Typed OrderGroupByArgs + HAVING matched %d group(s) and Mode='insensitive' matched Alice\n\n", len(highValueGroups))
 
 	// ───────────────────────────────────────────────────────────────────────────
 	// 9. ACID TRANSACTIONS

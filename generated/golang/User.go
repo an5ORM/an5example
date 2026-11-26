@@ -98,3 +98,65 @@ type UserCountArgs struct {
 	Where *UserWhereInput
 }
 
+// UserCountAggregateFilter filters COUNT aggregates in User GroupBy HAVING clauses.
+type UserCountAggregateFilter struct {
+	All *IntFilter
+	Id *IntFilter
+	Email *IntFilter
+	Name *IntFilter
+	IsActive *IntFilter
+	Score *IntFilter
+	Embedding *IntFilter
+	CreatedAt *IntFilter
+}
+
+// UserNumericAggregateFilter filters SUM/AVG aggregates in User GroupBy HAVING clauses.
+type UserNumericAggregateFilter struct {
+	Score *NumberFilter
+}
+
+// UserScalarAggregateFilter filters MIN/MAX aggregates in User GroupBy HAVING clauses.
+type UserScalarAggregateFilter struct {
+	Id *StringFilter
+	Email *StringFilter
+	Name *StringFilter
+	IsActive *BoolFilter
+	Score *IntFilter
+	Embedding *StringFilter
+	CreatedAt *DateTimeFilter
+}
+
+// UserAggregateHavingInput provides type-safe HAVING filters for User GroupBy queries.
+type UserAggregateHavingInput struct {
+	AND   []UserAggregateHavingInput
+	OR    []UserAggregateHavingInput
+	NOT   *UserAggregateHavingInput
+	Id *StringFilter
+	Email *StringFilter
+	Name *StringFilter
+	IsActive *BoolFilter
+	Score *IntFilter
+	Embedding *StringFilter
+	CreatedAt *DateTimeFilter
+	Count *UserCountAggregateFilter
+	Sum   *UserNumericAggregateFilter
+	Avg   *UserNumericAggregateFilter
+	Min   *UserScalarAggregateFilter
+	Max   *UserScalarAggregateFilter
+}
+
+// UserGroupByArgs provides ORM-style args for GroupBy queries on User.
+type UserGroupByArgs struct {
+	By      []string
+	Where   *UserWhereInput
+	Having  *UserAggregateHavingInput
+	OrderBy *UserOrderByInput
+	Take    *int
+	Skip    *int
+	Count   interface{}
+	Sum     []string
+	Avg     []string
+	Min     []string
+	Max     []string
+}
+
