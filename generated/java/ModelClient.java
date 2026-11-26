@@ -12,18 +12,6 @@ import an5.adapters.An5GroupBy;
 import an5.adapters.An5Query;
 import an5.adapters.An5TableClient;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-
-import an5.adapters.An5Adapter;
-import an5.adapters.An5Aggregate;
-import an5.adapters.An5GroupBy;
-import an5.adapters.An5Query;
-import an5.adapters.An5TableClient;
-
 /**
  * A typed client for one model.
  *
@@ -131,6 +119,11 @@ public final class ModelClient<T> {
   /** One row per group. */
   public List<Map<String, Object>> groupBy(An5GroupBy group) throws SQLException {
     return table.groupBy(group);
+  }
+
+  /** One row per group from a typed model GroupBy builder. */
+  public List<Map<String, Object>> groupBy(An5OrmTypes.GroupByBuilder group) throws SQLException {
+    return table.groupBy(group == null ? new An5GroupBy() : group.toGroupBy());
   }
 
   /** The rows nearest a vector. */

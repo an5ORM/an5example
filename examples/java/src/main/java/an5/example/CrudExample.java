@@ -7,6 +7,11 @@ import an5.client.An5DbContext;
 import an5.client.An5OrmTypes.BoolFilter;
 import an5.client.An5OrmTypes.ListRelationFilter;
 import an5.client.An5OrmTypes.NumberFilter;
+import an5.client.An5OrmTypes.OrderAggregateHaving;
+import an5.client.An5OrmTypes.OrderCountAggregateFilter;
+import an5.client.An5OrmTypes.OrderGroupBy;
+import an5.client.An5OrmTypes.OrderNumericAggregateFilter;
+import an5.client.An5OrmTypes.OrderOrderBy;
 import an5.client.An5OrmTypes.OrderWhere;
 import an5.client.An5OrmTypes.RelationFilter;
 import an5.client.An5OrmTypes.StringFilter;
@@ -116,6 +121,11 @@ public final class CrudExample {
         check(matching.size() == 1, "expected one alice, got " + matching.size());
         check("alice@example.com".equals(matching.get(0).getEmail()), "wrong row returned");
 
+        UserWhere ciAliceWhere = new UserWhere();
+        ciAliceWhere.Email = StringFilter.has("ALICE").insensitive();
+        List<User> ciMatching = db.getUser().findMany(new An5Query().where(ciAliceWhere.toMap()));
+        check(ciMatching.size() == 1, "expected case-insensitive contains to match Alice");
+
         // ── Read: typed number filter ──────────────────────────────────────────
         UserWhere highScore = new UserWhere();
         highScore.Score = NumberFilter.atLeast(100);
@@ -223,6 +233,49 @@ public final class CrudExample {
             rowCount instanceof Number && ((Number) rowCount).intValue() == 2,
             "aggregate count was " + rowCount);
         check(stats.get("_sum_total") instanceof Number, "aggregate sum was " + stats);
+
+        OrderWhere orderWhere = new OrderWhere();
+        orderWhere.Status = new StringFilter().insensitive();
+        orderWhere.Status.in = java.util.Arrays.asList("OPEN", "PAID");
+
+        OrderAggregateHaving orderHaving = new OrderAggregateHaving();
+        orderHaving._count = new OrderCountAggregateFilter();
+        orderHaving._count._all = NumberFilter.atLeast(1);
+        orderHaving._sum = new OrderNumericAggregateFilter();
+        orderHaving._sum.Total = NumberFilter.atLeast(200);
+
+        List<Map<String, Object>> groupedOrders =
+            db.getOrder()
+                .groupBy(
+                    new OrderGroupBy()
+                        .by("status")
+                        .where(orderWhere)
+                        .having(orderHaving)
+                        .count("_all", "status")
+                        .sum("total")
+                        .orderBy(new OrderOrderBy().by("status")));
+        check(
+            groupedOrders.size() == 1 && "open".equals(groupedOrders.get(0).get("status")),
+            "expected typed GroupBy Having to keep only 'open', got " + groupedOrders);
+        check(
+            ((Number) groupedOrders.get(0).get("_count_status")).intValue() == 1,
+            "expected per-field _count_status == 1");
+
+        List<Map<String, Object>> skippedGroups =
+            db.getOrder().groupBy(new OrderGroupBy().by("status").orderBy("status", "asc").skip(1));
+        check(
+            skippedGroups.size() == 1 && "paid".equals(skippedGroups.get(0).get("status")),
+            "expected SQLite offset-only GroupBy skip(1) to return 'paid', got " + skippedGroups);
+
+        boolean rejectedUngroupedHaving = false;
+        try {
+          OrderAggregateHaving invalidHaving = new OrderAggregateHaving();
+          invalidHaving.Total = NumberFilter.atLeast(100);
+          db.getOrder().groupBy(new OrderGroupBy().by("status").having(invalidHaving));
+        } catch (IllegalArgumentException expected) {
+          rejectedUngroupedHaving = true;
+        }
+        check(rejectedUngroupedHaving, "expected ungrouped scalar in having to throw IllegalArgumentException");
 
         // ── Count ──────────────────────────────────────────────────────────────
         long users = db.getUser().count(null);

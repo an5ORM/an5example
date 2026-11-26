@@ -60,6 +60,10 @@ public final class ViewClient<T> {
     return view.groupBy(group);
   }
 
+  public List<Map<String, Object>> groupBy(An5OrmTypes.GroupByBuilder group) throws SQLException {
+    return view.groupBy(group == null ? new An5GroupBy() : group.toGroupBy());
+  }
+
   public List<T> vectorSearch(
       double[] vector, Integer take, Map<String, Object> where, String vectorField, String metric)
       throws SQLException {
