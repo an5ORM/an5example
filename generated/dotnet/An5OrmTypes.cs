@@ -71,7 +71,11 @@ namespace An5Orm
 
     internal interface IAn5WhereInput { }
 
+    internal interface IAn5HavingInput { }
+
     internal interface IAn5QueryArgs { }
+
+    internal interface IAn5GroupByArgs { }
 
     internal interface IListRelationFilter
     {
@@ -194,6 +198,67 @@ namespace An5Orm
         public OrderWhereInput Where { get; set; }
     }
 
+    /// <summary>Count aggregate filters for Order.GroupBy() HAVING clauses.</summary>
+    public class OrderCountAggregateFilter
+    {
+        public IntFilter _all { get; set; }
+        public IntFilter Id { get; set; }
+        public IntFilter UserId { get; set; }
+        public IntFilter Total { get; set; }
+        public IntFilter Status { get; set; }
+        public IntFilter CreatedAt { get; set; }
+    }
+
+    /// <summary>Numeric aggregate filters (sum/avg) for Order.GroupBy() HAVING clauses.</summary>
+    public class OrderNumericAggregateFilter
+    {
+        public NumberFilter Total { get; set; }
+    }
+
+    /// <summary>Scalar aggregate filters (min/max) for Order.GroupBy() HAVING clauses.</summary>
+    public class OrderScalarAggregateFilter
+    {
+        public StringFilter Id { get; set; }
+        public StringFilter UserId { get; set; }
+        public IntFilter Total { get; set; }
+        public StringFilter Status { get; set; }
+        public DateTimeFilter CreatedAt { get; set; }
+    }
+
+    /// <summary>Type-safe HAVING filter for Order.GroupBy() queries.</summary>
+    public class OrderAggregateHavingInput : IAn5HavingInput
+    {
+        public List<OrderAggregateHavingInput> AND { get; set; }
+        public List<OrderAggregateHavingInput> OR { get; set; }
+        public OrderAggregateHavingInput NOT { get; set; }
+        public OrderCountAggregateFilter _count { get; set; }
+        public OrderNumericAggregateFilter _sum { get; set; }
+        public OrderNumericAggregateFilter _avg { get; set; }
+        public OrderScalarAggregateFilter _min { get; set; }
+        public OrderScalarAggregateFilter _max { get; set; }
+        public StringFilter Id { get; set; }
+        public StringFilter UserId { get; set; }
+        public IntFilter Total { get; set; }
+        public StringFilter Status { get; set; }
+        public DateTimeFilter CreatedAt { get; set; }
+    }
+
+    /// <summary>ORM-style args for Order.GroupBy().</summary>
+    public class OrderGroupByArgs : IAn5GroupByArgs
+    {
+        public List<string> By { get; set; }
+        public OrderWhereInput Where { get; set; }
+        public OrderAggregateHavingInput Having { get; set; }
+        public OrderOrderByInput OrderBy { get; set; }
+        public int? Skip { get; set; }
+        public int? Take { get; set; }
+        public object Count { get; set; }
+        public List<string> Sum { get; set; }
+        public List<string> Avg { get; set; }
+        public List<string> Min { get; set; }
+        public List<string> Max { get; set; }
+    }
+
     // ── User ORM Types ──────────────────────────────────────────────────────
 
     /// <summary>Type-safe WHERE filter for User queries.</summary>
@@ -280,6 +345,73 @@ namespace An5Orm
     public class UserCountArgs : IAn5QueryArgs
     {
         public UserWhereInput Where { get; set; }
+    }
+
+    /// <summary>Count aggregate filters for User.GroupBy() HAVING clauses.</summary>
+    public class UserCountAggregateFilter
+    {
+        public IntFilter _all { get; set; }
+        public IntFilter Id { get; set; }
+        public IntFilter Email { get; set; }
+        public IntFilter Name { get; set; }
+        public IntFilter IsActive { get; set; }
+        public IntFilter Score { get; set; }
+        public IntFilter Embedding { get; set; }
+        public IntFilter CreatedAt { get; set; }
+    }
+
+    /// <summary>Numeric aggregate filters (sum/avg) for User.GroupBy() HAVING clauses.</summary>
+    public class UserNumericAggregateFilter
+    {
+        public NumberFilter Score { get; set; }
+    }
+
+    /// <summary>Scalar aggregate filters (min/max) for User.GroupBy() HAVING clauses.</summary>
+    public class UserScalarAggregateFilter
+    {
+        public StringFilter Id { get; set; }
+        public StringFilter Email { get; set; }
+        public StringFilter Name { get; set; }
+        public BoolFilter IsActive { get; set; }
+        public IntFilter Score { get; set; }
+        public StringFilter Embedding { get; set; }
+        public DateTimeFilter CreatedAt { get; set; }
+    }
+
+    /// <summary>Type-safe HAVING filter for User.GroupBy() queries.</summary>
+    public class UserAggregateHavingInput : IAn5HavingInput
+    {
+        public List<UserAggregateHavingInput> AND { get; set; }
+        public List<UserAggregateHavingInput> OR { get; set; }
+        public UserAggregateHavingInput NOT { get; set; }
+        public UserCountAggregateFilter _count { get; set; }
+        public UserNumericAggregateFilter _sum { get; set; }
+        public UserNumericAggregateFilter _avg { get; set; }
+        public UserScalarAggregateFilter _min { get; set; }
+        public UserScalarAggregateFilter _max { get; set; }
+        public StringFilter Id { get; set; }
+        public StringFilter Email { get; set; }
+        public StringFilter Name { get; set; }
+        public BoolFilter IsActive { get; set; }
+        public IntFilter Score { get; set; }
+        public StringFilter Embedding { get; set; }
+        public DateTimeFilter CreatedAt { get; set; }
+    }
+
+    /// <summary>ORM-style args for User.GroupBy().</summary>
+    public class UserGroupByArgs : IAn5GroupByArgs
+    {
+        public List<string> By { get; set; }
+        public UserWhereInput Where { get; set; }
+        public UserAggregateHavingInput Having { get; set; }
+        public UserOrderByInput OrderBy { get; set; }
+        public int? Skip { get; set; }
+        public int? Take { get; set; }
+        public object Count { get; set; }
+        public List<string> Sum { get; set; }
+        public List<string> Avg { get; set; }
+        public List<string> Min { get; set; }
+        public List<string> Max { get; set; }
     }
 
 }

@@ -377,6 +377,22 @@ public static class QueriesExample
                 var sumVal = g.ContainsKey("_sum_total") && g["_sum_total"] != null ? g["_sum_total"] : 0;
                 Console.WriteLine($"    - Status '{g["status"]}': count={g["_count"]}, sum=${sumVal}");
             }
+
+            var highValueStatuses = db.Order.GroupBy(new OrderGroupByArgs
+            {
+                By = new List<string> { "status" },
+                Where = new OrderWhereInput { Status = new StringFilter { In = new List<string> { "PAID", "PROCESSING" }, Mode = "insensitive" } },
+                Having = new OrderAggregateHavingInput
+                {
+                    _sum = new OrderNumericAggregateFilter { Total = new NumberFilter { Gte = 400 } },
+                },
+                Count = new Dictionary<string, bool> { { "_all", true }, { "status", true } },
+                Sum = new List<string> { "total" },
+                OrderBy = new OrderOrderByInput { Status = "asc" },
+            });
+            if (highValueStatuses.Count != 1 || highValueStatuses[0]["status"]?.ToString() != "paid")
+                throw new Exception($"Expected single 'paid' group from typed GroupBy Having, got {highValueStatuses.Count}");
+            Console.WriteLine($"  ✓ Typed GroupBy Having (_sum.Total >= 400, case-insensitive In): status='{highValueStatuses[0]["status"]}', sum=${((Dictionary<string, object>)highValueStatuses[0]["_sum"])["total"]}");
             Console.WriteLine();
 
             // ───────────────────────────────────────────────────────────────────────────
