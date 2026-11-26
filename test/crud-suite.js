@@ -183,6 +183,36 @@ async function runCrudSuite({ db, opts }) {
   const byActive = Object.fromEntries(grouped.map((r) => [normalizeBool(r.isActive), Number(r._count)]));
   assert.strictEqual(byActive['1'], 6);
 
+  const groupedOrdersWithHaving = await db.order.groupBy({
+    by: 'status',
+    _count: { _all: true, status: true },
+    _sum: { total: true },
+    having: {
+      OR: [
+        { _sum: { total: { gte: 200 } } },
+        { status: { equals: 'OPEN', mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { status: 'asc' },
+  });
+  assert.deepStrictEqual(
+    groupedOrdersWithHaving.map((r) => ({ status: r.status, count: Number(r._count._all), statusCount: Number(r._count.status), sum: Number(r._sum.total) })),
+    [
+      { status: 'open', count: 1, statusCount: 1, sum: 100 },
+      { status: 'paid', count: 1, statusCount: 1, sum: 250 },
+    ]
+  );
+
+  const paidOnlyHaving = await db.order.groupBy({
+    by: 'status',
+    _sum: { total: true },
+    having: { _sum: { total: { gt: 200 } } },
+  });
+  assert.deepStrictEqual(paidOnlyHaving.map((r) => r.status), ['paid']);
+
+  await assert.rejects(() => db.order.groupBy({ by: 'status', having: { total: { gt: 10 } } }), /must be included in groupBy/);
+  await assert.rejects(() => db.order.groupBy({ by: 'status', having: { _sum: { total: { bogus: 1 } } } }), /Unknown filter operator 'bogus'/);
+
   // ── TRANSACTIONS ───────────────────────────────────────────────────────────
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: alice.id }, data: { score: { set: 123 } } });

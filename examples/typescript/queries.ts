@@ -335,15 +335,23 @@ async function main(): Promise<void> {
   console.log(`    Average:     $${Number(orderStats._avg.total).toFixed(2)}`);
   console.log(`    Min / Max:   $${orderStats._min.total} / $${orderStats._max.total}`);
 
-  // GroupBy status
+  // GroupBy status with aggregate having filter
   const groupedOrders = await db.order.groupBy({
     by: 'status',
-    _count: true,
+    _count: { _all: true, status: true },
     _sum: { total: true },
+    having: {
+      OR: [
+        { _sum: { total: { gte: 500 } } },
+        { status: 'processing' },
+      ],
+    },
+    orderBy: { status: 'asc' },
   });
-  console.log('  ✓ GroupBy status:');
+  assert.strictEqual(groupedOrders.length, 2);
+  console.log('  ✓ GroupBy status (with having):');
   for (const g of groupedOrders) {
-    console.log(`    - Status '${g.status}': count=${g._count}, sum=$${g._sum?.total ?? 0}`);
+    console.log(`    - Status '${g.status}': count=${g._count?._all ?? g._count}, sum=$${g._sum?.total ?? 0}`);
   }
   console.log();
 
