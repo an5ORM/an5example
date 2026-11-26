@@ -9,9 +9,10 @@
 //!   npm run test:rust
 
 use an5_client::{
-    An5Client, BoolFilter, IntFilter, ListRelationFilter, OrderCreateInput, OrderWhereInput,
-    RelationFilter, SortOrder, StringFilter, UserCreateInput, UserFindManyArgs, UserFindUniqueArgs,
-    UserOrderByInput, UserUpdateArgs, UserUpdateInput, UserVectorSearchArgs, UserWhereInput,
+    An5Client, BoolFilter, IntFilter, ListRelationFilter, OrderAggregateArgs, OrderCreateInput,
+    OrderWhereInput, RelationFilter, SortOrder, StringFilter, UserCreateInput, UserFindManyArgs,
+    UserFindUniqueArgs, UserOrderByInput, UserUpdateArgs, UserUpdateInput, UserUpsertArgs,
+    UserVectorSearchArgs, UserWhereInput,
 };
 use serde_json::json;
 
@@ -162,6 +163,7 @@ async fn main() {
                     UserWhereInput {
                         is_active: Some(BoolFilter {
                             equals: Some(true),
+                            not: Some(false),
                         }),
                         ..Default::default()
                     },
@@ -383,13 +385,116 @@ async fn main() {
     assert_eq!(grouped_orders[0]["_count_user_id"].as_i64(), Some(1));
     assert_eq!(grouped_orders[0]["sum_total"].as_i64(), Some(250));
 
+    // ── Eager include + typed Aggregate + Upsert/Batch helpers ──────────────
+    let alice_with_top_order = users
+        .find_many(&UserFindManyArgs {
+            where_: Some(UserWhereInput {
+                id: Some(StringFilter {
+                    equals: alice.id.clone(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            include: Some(json!({
+                "orders": { "orderBy": { "total": "desc" }, "take": 1 }
+            })),
+            ..Default::default()
+        })
+        .await
+        .expect("include nested orders");
+    assert_eq!(alice_with_top_order.len(), 1);
+    let top_orders = alice_with_top_order[0].orders.as_ref().expect("included orders");
+    assert_eq!(top_orders.len(), 1);
+    assert_eq!(top_orders[0].total, Some(250));
+
+    let order_agg = orders
+        .aggregate(&OrderAggregateArgs {
+            sum: Some(vec!["total".to_string()]),
+            avg: Some(vec!["total".to_string()]),
+            min: Some(vec!["total".to_string()]),
+            max: Some(vec!["total".to_string()]),
+            ..Default::default()
+        })
+        .await
+        .expect("order aggregate");
+    assert_eq!(order_agg["_count"].as_i64(), Some(2));
+    assert_eq!(order_agg["_sum_total"].as_i64(), Some(325));
+
+    let batch_inserted = users
+        .create_many(&[
+            UserCreateInput {
+                email: "charlie@example.com".to_string(),
+                name: Some("Charlie".to_string()),
+                is_active: Some(true),
+                score: Some(15),
+                embedding: None,
+                created_at: None,
+            },
+            UserCreateInput {
+                email: "dana@example.com".to_string(),
+                name: Some("Dana".to_string()),
+                is_active: Some(true),
+                score: Some(25),
+                embedding: None,
+                created_at: None,
+            },
+        ])
+        .await
+        .expect("create_many users");
+    assert_eq!(batch_inserted, 2);
+
+    let batch_updated = users
+        .update_many(&UserUpdateArgs {
+            where_: Some(UserWhereInput {
+                score: Some(IntFilter {
+                    gte: Some(10),
+                    lt: Some(40),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            data: UserUpdateInput {
+                score: Some(60),
+                ..Default::default()
+            },
+        })
+        .await
+        .expect("update_many users");
+    assert_eq!(batch_updated, 2);
+
+    let upserted_charlie = users
+        .upsert(&UserUpsertArgs {
+            where_: Some(UserWhereInput {
+                email: Some(StringFilter {
+                    equals: Some("charlie@example.com".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            create: UserCreateInput {
+                email: "charlie@example.com".to_string(),
+                name: Some("Charlie".to_string()),
+                is_active: Some(true),
+                score: Some(0),
+                embedding: None,
+                created_at: None,
+            },
+            update: UserUpdateInput {
+                score: Some(77),
+                ..Default::default()
+            },
+        })
+        .await
+        .expect("upsert charlie");
+    assert_eq!(upserted_charlie.score, Some(77));
+
     // ── Delete ───────────────────────────────────────────────────────────────
     let deleted_orders = orders
-        .delete(&an5_client::OrderFindUniqueArgs::default())
+        .delete_many(&an5_client::OrderFindUniqueArgs::default())
         .await
         .expect("delete orders");
     let deleted_users = users
-        .delete(&UserFindUniqueArgs {
+        .delete_many(&UserFindUniqueArgs {
             where_: Some(UserWhereInput {
                 email: Some(StringFilter {
                     contains: Some("example.com".to_string()),
@@ -401,7 +506,7 @@ async fn main() {
         .await
         .expect("delete users");
     println!("deleted: {deleted_users} users");
-    assert_eq!(deleted_users, 2);
+    assert_eq!(deleted_users, 4);
 
     let remaining = users
         .count(&UserFindUniqueArgs::default())

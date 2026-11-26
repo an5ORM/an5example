@@ -260,6 +260,12 @@ pub struct BoolFilter {
         skip_serializing_if = "Option::is_none"
     )]
     pub equals: Option<bool>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_option_bool_flexible",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub not: Option<bool>,
 }
 
 /// Type-safe filter for datetime fields.
@@ -278,6 +284,10 @@ pub struct DateTimeFilter {
     pub lt: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lte: Option<DateTime<Utc>>,
+    #[serde(default, rename = "in", skip_serializing_if = "Vec::is_empty")]
+    pub in_list: Vec<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not_in: Vec<DateTime<Utc>>,
 }
 
 /// Type-safe filter for to-many relations (`some` / `none` / `every`).
