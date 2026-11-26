@@ -5,9 +5,11 @@ from .an5_orm_types import (
     StringFilter, IntFilter, NumberFilter, BoolFilter, DateTimeFilter,
     OrderWhereInput, OrderOrderByInput,
     OrderCreateInput, OrderUpdateInput,
+    OrderAggregateHavingInput, OrderGroupByArgs,
     OrderFindManyArgs, OrderFindFirstArgs,
     UserWhereInput, UserOrderByInput,
     UserCreateInput, UserUpdateInput,
+    UserAggregateHavingInput, UserGroupByArgs,
     UserFindManyArgs, UserFindFirstArgs,
 )
 from .an5_client import An5Client
@@ -22,9 +24,11 @@ __all__ = [
     "Order",
     "OrderWhereInput", "OrderOrderByInput",
     "OrderCreateInput", "OrderUpdateInput",
+    "OrderAggregateHavingInput", "OrderGroupByArgs",
     "OrderFindManyArgs", "OrderFindFirstArgs",
     "User",
     "UserWhereInput", "UserOrderByInput",
     "UserCreateInput", "UserUpdateInput",
+    "UserAggregateHavingInput", "UserGroupByArgs",
     "UserFindManyArgs", "UserFindFirstArgs",
 ]

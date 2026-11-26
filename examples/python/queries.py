@@ -31,6 +31,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "an
 import an5_client
 from an5_orm_types import (
     IntFilter,
+    NumberFilter,
+    OrderAggregateHavingInput,
+    OrderGroupByArgs,
     StringFilter,
     UserFindManyArgs,
     UserOrderByInput,
@@ -372,6 +375,24 @@ def main():
     print("  ✓ GroupBy status:")
     for g in grouped:
         print(f"    - Status '{g['status']}': count={g.get('_count', 1)}, sum=${(g.get('_sum') or {}).get('total', 0)}")
+
+    # Typed GroupByArgs with HAVING + case-insensitive StringFilter
+    high_value_groups = db.order.group_by(
+        OrderGroupByArgs(
+            by=["status"],
+            having=OrderAggregateHavingInput(
+                _count={"_all": IntFilter(gte=1)},
+                _sum={"total": NumberFilter(gte=500)},
+            ),
+            _count={"_all": True, "user_id": True},
+            _sum={"total": True},
+        )
+    )
+    assert len(high_value_groups) == 1 and high_value_groups[0]["status"] == "paid"
+    assert high_value_groups[0]["_count"]["userId"] == 3
+    ci_alice = db.user.find_many(where=UserWhereInput(name=StringFilter(contains="alice", mode="insensitive")))
+    assert len(ci_alice) == 1 and ci_alice[0]["id"] == alice["id"]
+    print(f"  ✓ Typed GroupByArgs + HAVING matched {len(high_value_groups)} group(s) and mode='insensitive' matched Alice")
     print()
 
     # ───────────────────────────────────────────────────────────────────────────

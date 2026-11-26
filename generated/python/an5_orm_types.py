@@ -35,6 +35,7 @@ class StringFilter:
     gte: Optional[str] = None
     lt: Optional[str] = None
     lte: Optional[str] = None
+    mode: Optional[str] = None
 
 @dataclass
 class IntFilter:
@@ -136,6 +137,38 @@ class OrderFindFirstArgs:
     select: Optional[Union[List[str], Dict[str, Any]]] = None
     include: Optional[Dict[str, Any]] = None
 
+@dataclass
+class OrderAggregateHavingInput:
+    """Type-safe HAVING filter for Order.group_by() queries."""
+    AND: Optional[Union['OrderAggregateHavingInput', List['OrderAggregateHavingInput']]] = None
+    OR: Optional[List['OrderAggregateHavingInput']] = None
+    NOT: Optional[Union['OrderAggregateHavingInput', List['OrderAggregateHavingInput']]] = None
+    id: Optional[Union[str, StringFilter]] = None
+    user_id: Optional[Union[str, StringFilter]] = None
+    total: Optional[Union[int, IntFilter]] = None
+    status: Optional[Union[str, StringFilter]] = None
+    created_at: Optional[Union[datetime, str, DateTimeFilter]] = None
+    _count: Optional[Dict[str, Union[int, IntFilter, NumberFilter, Dict[str, Any]]]] = None
+    _sum: Optional[Dict[str, Union[int, float, IntFilter, NumberFilter, Dict[str, Any]]]] = None
+    _avg: Optional[Dict[str, Union[int, float, IntFilter, NumberFilter, Dict[str, Any]]]] = None
+    _min: Optional[Dict[str, Any]] = None
+    _max: Optional[Dict[str, Any]] = None
+
+@dataclass
+class OrderGroupByArgs:
+    """ORM-style args for Order.group_by()."""
+    by: Union[str, List[str]]
+    where: Optional[OrderWhereInput] = None
+    having: Optional[OrderAggregateHavingInput] = None
+    order_by: Optional[Union[OrderOrderByInput, List[OrderOrderByInput]]] = None
+    skip: int = 0
+    take: Optional[int] = None
+    _count: Optional[Union[bool, str, List[str], Dict[str, bool]]] = None
+    _sum: Optional[Union[str, List[str], Dict[str, bool]]] = None
+    _avg: Optional[Union[str, List[str], Dict[str, bool]]] = None
+    _min: Optional[Union[str, List[str], Dict[str, bool]]] = None
+    _max: Optional[Union[str, List[str], Dict[str, bool]]] = None
+
 # ─── User ORM Types ────────────────────────────────────────────────────────
 
 @dataclass
@@ -201,4 +234,38 @@ class UserFindFirstArgs:
     order_by: Optional[UserOrderByInput] = None
     select: Optional[Union[List[str], Dict[str, Any]]] = None
     include: Optional[Dict[str, Any]] = None
+
+@dataclass
+class UserAggregateHavingInput:
+    """Type-safe HAVING filter for User.group_by() queries."""
+    AND: Optional[Union['UserAggregateHavingInput', List['UserAggregateHavingInput']]] = None
+    OR: Optional[List['UserAggregateHavingInput']] = None
+    NOT: Optional[Union['UserAggregateHavingInput', List['UserAggregateHavingInput']]] = None
+    id: Optional[Union[str, StringFilter]] = None
+    email: Optional[Union[str, StringFilter]] = None
+    name: Optional[Union[str, StringFilter]] = None
+    is_active: Optional[Union[bool, BoolFilter]] = None
+    score: Optional[Union[int, IntFilter]] = None
+    embedding: Optional[Union[str, StringFilter]] = None
+    created_at: Optional[Union[datetime, str, DateTimeFilter]] = None
+    _count: Optional[Dict[str, Union[int, IntFilter, NumberFilter, Dict[str, Any]]]] = None
+    _sum: Optional[Dict[str, Union[int, float, IntFilter, NumberFilter, Dict[str, Any]]]] = None
+    _avg: Optional[Dict[str, Union[int, float, IntFilter, NumberFilter, Dict[str, Any]]]] = None
+    _min: Optional[Dict[str, Any]] = None
+    _max: Optional[Dict[str, Any]] = None
+
+@dataclass
+class UserGroupByArgs:
+    """ORM-style args for User.group_by()."""
+    by: Union[str, List[str]]
+    where: Optional[UserWhereInput] = None
+    having: Optional[UserAggregateHavingInput] = None
+    order_by: Optional[Union[UserOrderByInput, List[UserOrderByInput]]] = None
+    skip: int = 0
+    take: Optional[int] = None
+    _count: Optional[Union[bool, str, List[str], Dict[str, bool]]] = None
+    _sum: Optional[Union[str, List[str], Dict[str, bool]]] = None
+    _avg: Optional[Union[str, List[str], Dict[str, bool]]] = None
+    _min: Optional[Union[str, List[str], Dict[str, bool]]] = None
+    _max: Optional[Union[str, List[str], Dict[str, bool]]] = None
 
