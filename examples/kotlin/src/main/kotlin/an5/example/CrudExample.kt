@@ -168,6 +168,60 @@ fun main() {
             check((stats["_count"] as? Number)?.toInt() == 2) { "aggregate count was $stats" }
             check(stats["_sum_total"] is Number) { "aggregate sum was $stats" }
 
+            val insensitiveMatches = db.user.findMany(
+                An5Orm.UserWhere(email = An5Orm.StringFilter.has("ALICE").insensitive()).build()
+            )
+            check(insensitiveMatches.size == 1 && insensitiveMatches.first().email == "alice@example.com") {
+                "expected case-insensitive StringFilter to match alice@example.com, got $insensitiveMatches"
+            }
+
+            val statusWhere = An5Orm.OrderWhere(
+                status = An5Orm.StringFilter.inList(listOf("OPEN", "PAID")).insensitive()
+            )
+            val orderHaving = An5Orm.OrderAggregateHaving(
+                _count = An5Orm.OrderCountAggregateFilter(_all = An5Orm.NumberFilter.atLeast(1)),
+                _sum = An5Orm.OrderNumericAggregateFilter(total = An5Orm.NumberFilter.atLeast(200)),
+            )
+            val groupedOrders = db.order.groupBy(
+                An5Orm.OrderGroupBy()
+                    .by("status")
+                    .where(statusWhere)
+                    .having(orderHaving)
+                    .count("_all", "status")
+                    .sum("total")
+                    .orderBy(An5Orm.OrderOrderBy().asc("status"))
+            )
+            check(groupedOrders.size == 1 && groupedOrders.first()["status"] == "open") {
+                "expected typed GroupBy Having to keep only 'open', got $groupedOrders"
+            }
+            check((groupedOrders.first()["_count_status"] as? Number)?.toInt() == 1) {
+                "expected per-field _count_status == 1, got $groupedOrders"
+            }
+
+            val skippedGroups = db.order.groupBy(
+                An5Orm.OrderGroupBy()
+                    .by("status")
+                    .orderBy("status", Sort.ASC)
+                    .skip(1)
+            )
+            check(skippedGroups.size == 1 && skippedGroups.first()["status"] == "paid") {
+                "expected SQLite offset-only GroupBy skip(1) to return 'paid', got $skippedGroups"
+            }
+
+            val rejectedUngroupedHaving = try {
+                db.order.groupBy(
+                    An5Orm.OrderGroupBy()
+                        .by("status")
+                        .having(An5Orm.OrderAggregateHaving(total = An5Orm.NumberFilter.atLeast(100)))
+                )
+                false
+            } catch (_: IllegalArgumentException) {
+                true
+            }
+            check(rejectedUngroupedHaving) {
+                "expected ungrouped scalar in having to throw IllegalArgumentException"
+            }
+
             // ── Count ──────────────────────────────────────────────────────────
             val users = db.user.count()
             println("users before cleanup: $users")

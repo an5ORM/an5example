@@ -81,6 +81,9 @@ class ModelClient<T : Any>(
     fun groupBy(vararg by: String, block: AggregateBuilder.() -> Unit = {}): List<Row> =
         delegate.groupBy(*by, block = block)
 
+    /** One row per group built through a typed [An5Orm.GroupByBuilder]. */
+    fun groupBy(builder: An5Orm.GroupByBuilder): List<Row> = delegate.groupBy(builder.build())
+
     /** The rows nearest [vector]. */
     fun vectorSearch(
         vector: DoubleArray,
@@ -121,6 +124,9 @@ class ViewClient<T : Any>(
     /** One row per group, each carrying the group's count and aggregates. */
     fun groupBy(vararg by: String, block: AggregateBuilder.() -> Unit = {}): List<Row> =
         delegate.groupBy(*by, block = block)
+
+    /** One row per group built through a typed [An5Orm.GroupByBuilder]. */
+    fun groupBy(builder: An5Orm.GroupByBuilder): List<Row> = delegate.groupBy(builder.build())
 
     /** The rows nearest [vector]. */
     fun vectorSearch(
