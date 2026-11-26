@@ -157,6 +157,8 @@ pub struct StringFilter {
     pub in_list: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_in: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 /// Type-safe filter for integer fields.

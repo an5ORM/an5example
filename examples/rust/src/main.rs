@@ -342,6 +342,47 @@ async fn main() {
     assert!(ranked[0].1 < 1e-6, "an identical vector has distance 0");
     println!("vector search: {:?} at distance {}", ranked[0].0.name, ranked[0].1);
 
+    // ── GroupBy with HAVING + mode="insensitive" ─────────────────────────────
+    let ci_alice = users
+        .find_many(&UserFindManyArgs {
+            where_: Some(UserWhereInput {
+                email: Some(StringFilter {
+                    contains: Some("ALICE".to_string()),
+                    mode: Some("insensitive".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("case-insensitive find_many");
+    assert_eq!(ci_alice.len(), 1);
+    assert_eq!(ci_alice[0].id, alice.id);
+
+    let grouped_orders = orders
+        .group_by(&an5_client::OrderGroupByArgs {
+            by: vec!["status".to_string()],
+            having: Some(an5_client::OrderAggregateHavingInput {
+                sum: Some(an5_client::OrderNumericAggregateFilter {
+                    total: Some(an5_client::NumberFilter {
+                        gte: Some(200.0),
+                        ..Default::default()
+                    }),
+                }),
+                ..Default::default()
+            }),
+            count: Some(json!({ "_all": true, "user_id": true })),
+            sum: Some(vec!["total".to_string()]),
+            ..Default::default()
+        })
+        .await
+        .expect("typed OrderGroupByArgs with HAVING");
+    assert_eq!(grouped_orders.len(), 1);
+    assert_eq!(grouped_orders[0]["status"].as_str(), Some("open"));
+    assert_eq!(grouped_orders[0]["_count_user_id"].as_i64(), Some(1));
+    assert_eq!(grouped_orders[0]["sum_total"].as_i64(), Some(250));
+
     // ── Delete ───────────────────────────────────────────────────────────────
     let deleted_orders = orders
         .delete(&an5_client::OrderFindUniqueArgs::default())
