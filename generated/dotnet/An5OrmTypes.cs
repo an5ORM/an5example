@@ -75,6 +75,8 @@ namespace An5Orm
 
     internal interface IAn5QueryArgs { }
 
+    internal interface IAn5Include { }
+
     internal interface IAn5GroupByArgs { }
 
     internal interface IListRelationFilter
@@ -162,6 +164,13 @@ namespace An5Orm
         public DateTime? CreatedAt { get; set; }
     }
 
+    /// <summary>ORM-style eager relation include options for Order.</summary>
+    public class OrderInclude : IAn5Include
+    {
+        public object User { get; set; }
+        public object _count { get; set; }
+    }
+
     /// <summary>ORM-style args for Order.FindMany().</summary>
     public class OrderFindManyArgs : IAn5QueryArgs
     {
@@ -170,6 +179,7 @@ namespace An5Orm
         public int? Take { get; set; }
         public int? Skip { get; set; }
         public List<string> Select { get; set; }
+        public object Include { get; set; }
     }
 
     /// <summary>ORM-style args for Order.FindFirst().</summary>
@@ -178,12 +188,15 @@ namespace An5Orm
         public OrderWhereInput Where { get; set; }
         public OrderOrderByInput OrderBy { get; set; }
         public List<string> Select { get; set; }
+        public object Include { get; set; }
     }
 
     /// <summary>ORM-style args for Order.FindUnique().</summary>
     public class OrderFindUniqueArgs : IAn5QueryArgs
     {
         public OrderWhereInput Where { get; set; }
+        public List<string> Select { get; set; }
+        public object Include { get; set; }
     }
 
     /// <summary>ORM-style args for Order.DeleteMany().</summary>
@@ -311,6 +324,13 @@ namespace An5Orm
         public DateTime? CreatedAt { get; set; }
     }
 
+    /// <summary>ORM-style eager relation include options for User.</summary>
+    public class UserInclude : IAn5Include
+    {
+        public object Orders { get; set; }
+        public object _count { get; set; }
+    }
+
     /// <summary>ORM-style args for User.FindMany().</summary>
     public class UserFindManyArgs : IAn5QueryArgs
     {
@@ -319,6 +339,7 @@ namespace An5Orm
         public int? Take { get; set; }
         public int? Skip { get; set; }
         public List<string> Select { get; set; }
+        public object Include { get; set; }
     }
 
     /// <summary>ORM-style args for User.FindFirst().</summary>
@@ -327,12 +348,15 @@ namespace An5Orm
         public UserWhereInput Where { get; set; }
         public UserOrderByInput OrderBy { get; set; }
         public List<string> Select { get; set; }
+        public object Include { get; set; }
     }
 
     /// <summary>ORM-style args for User.FindUnique().</summary>
     public class UserFindUniqueArgs : IAn5QueryArgs
     {
         public UserWhereInput Where { get; set; }
+        public List<string> Select { get; set; }
+        public object Include { get; set; }
     }
 
     /// <summary>ORM-style args for User.DeleteMany().</summary>

@@ -14,5 +14,8 @@ namespace An5Orm.Entities
 
         // ── Relations ────────────────────────────────────────────────────────
         public User User { get; set; }
+
+        // ── Relation counts (populated via Include._count) ───────────────────
+        public Dictionary<string, int> _count { get; set; }
     }
 }

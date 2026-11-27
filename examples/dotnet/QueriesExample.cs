@@ -310,6 +310,106 @@ public static class QueriesExample
             catch (ArgumentException) { }
             Console.WriteLine("  ✓ Strict validation: rejected contradictory RelationFilter, invalid Mode & bad args\n");
 
+            // Typed eager Include with nested Where/OrderBy/per-parent Skip/Take, Select, _count & recursive nesting
+            var includedUsers = db.User.FindMany(new UserFindManyArgs
+            {
+                Where = new UserWhereInput
+                {
+                    Id = new StringFilter { In = new List<string> { "u_alice", "u_bob", "u_charlie" } },
+                },
+                OrderBy = new UserOrderByInput { Name = "asc" },
+                Include = new UserInclude
+                {
+                    Orders = true,
+                    _count = true,
+                },
+            });
+            if (includedUsers.Count != 3 || includedUsers[0].Orders.Count != 1 || includedUsers[1].Orders.Count != 3 || includedUsers[2].Orders.Count != 0)
+                throw new Exception("Unexpected eager Include Orders counts for Alice/Bob/Charlie");
+            if (includedUsers[0]._count["orders"] != 1 || includedUsers[1]._count["Orders"] != 3 || includedUsers[2]._count["orders"] != 0)
+                throw new Exception("Unexpected eager Include._count values");
+            Console.WriteLine($"  ✓ Eager Include (User.Orders & _count): Alice={includedUsers[0].Orders.Count}, Bob={includedUsers[1].Orders.Count}, Charlie={includedUsers[2].Orders.Count}");
+
+            // Per-parent Skip/Take + nested Where/OrderBy + Select inside Include
+            var perParentPaged = db.User.FindMany(new UserFindManyArgs
+            {
+                Where = new UserWhereInput { Id = new StringFilter { In = new List<string> { "u_alice", "u_bob" } } },
+                OrderBy = new UserOrderByInput { Name = "asc" },
+                Include = new UserInclude
+                {
+                    Orders = new OrderFindManyArgs
+                    {
+                        OrderBy = new OrderOrderByInput { Total = "desc" },
+                        Skip = 1,
+                        Take = 1,
+                        Select = new List<string> { "Id", "Total" },
+                    },
+                    _count = new Dictionary<string, object>
+                    {
+                        { "select", new Dictionary<string, object> { { "orders", new Dictionary<string, object> { { "where", new OrderWhereInput { Status = new StringFilter { Equals = "paid" } } } } } } },
+                    },
+                },
+            });
+            if (perParentPaged[0].Orders.Count != 0 || perParentPaged[1].Orders.Count != 1 || perParentPaged[1].Orders[0].Id != "o_b1" || perParentPaged[1].Orders[0].Total != 120)
+                throw new Exception("Unexpected per-parent Skip/Take result in Include");
+            if (perParentPaged[1].Orders[0].UserId != null)
+                throw new Exception("Expected omitted Order.UserId to remain cleared after Select+Include");
+            if (perParentPaged[0]._count["orders"] != 1 || perParentPaged[1]._count["orders"] != 2)
+                throw new Exception("Unexpected filtered _count for paid orders");
+            Console.WriteLine($"  ✓ Per-parent Include(Skip=1,Take=1) & filtered _count(paid): Alice paid={perParentPaged[0]._count["orders"]}, Bob 2nd order={perParentPaged[1].Orders[0].Id} (${perParentPaged[1].Orders[0].Total}), paid={perParentPaged[1]._count["orders"]}");
+
+            // Nested 2-level Include + FindUnique with Select omitting Id
+            var deepUser = db.User.FindUnique(new UserFindUniqueArgs
+            {
+                Where = new UserWhereInput { Email = new StringFilter { Equals = "bob@example.com" } },
+                Select = new List<string> { "Email" },
+                Include = new UserInclude
+                {
+                    Orders = new OrderFindManyArgs
+                    {
+                        Where = new OrderWhereInput { Total = new IntFilter { Gte = 300 } },
+                        Include = new OrderInclude { User = true },
+                    },
+                },
+            });
+            if (deepUser == null || deepUser.Id != null || deepUser.Orders.Count != 1 || deepUser.Orders[0].User?.Email != "bob@example.com")
+                throw new Exception("Unexpected FindUnique nested 2-level Include result");
+
+            var firstOrderWithUser = db.Order.FindFirst(new OrderFindFirstArgs
+            {
+                OrderBy = new OrderOrderByInput { Total = "desc" },
+                Include = new OrderInclude { User = true },
+            });
+            if (firstOrderWithUser == null || firstOrderWithUser.Id != "o_a1" || firstOrderWithUser.User?.Id != "u_alice")
+                throw new Exception("Unexpected FindFirst to-one Order.User Include result");
+            Console.WriteLine($"  ✓ 2-level nested Include & Select+Include join retention passed (top order user={firstOrderWithUser.User.Email})");
+
+            try
+            {
+                db.User.FindMany(new UserFindManyArgs { Include = new Dictionary<string, object> { { "bogusRel", true } } });
+                throw new Exception("Expected ArgumentException for unknown Include relation");
+            }
+            catch (ArgumentException) { }
+            try
+            {
+                db.User.FindMany(new UserFindManyArgs
+                {
+                    Include = new Dictionary<string, object> { { "orders", new Dictionary<string, object> { { "bogusOpt", true } } } },
+                });
+                throw new Exception("Expected ArgumentException for unknown nested Include option");
+            }
+            catch (ArgumentException) { }
+            try
+            {
+                db.User.FindMany(new UserFindManyArgs
+                {
+                    Include = new UserInclude { Orders = new OrderFindManyArgs { Take = -1 } },
+                });
+                throw new Exception("Expected ArgumentException for negative Include.Take");
+            }
+            catch (ArgumentException) { }
+            Console.WriteLine("  ✓ Strict Include validation: rejected unknown relation, bad nested option & negative Take\n");
+
             // ───────────────────────────────────────────────────────────────────────────
             // 7. MUTATIONS: update, Field Math, upsert, and delete
             // ───────────────────────────────────────────────────────────────────────────
