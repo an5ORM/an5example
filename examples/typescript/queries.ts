@@ -230,7 +230,7 @@ async function main(): Promise<void> {
     data: { userId: alice.id, total: 500, status: 'paid', createdAt: ts(7) },
   });
 
-  // Query User with eager-loaded Orders and relation _count
+  // Query User with eager-loaded Orders and filtered + unfiltered relation _count
   const usersWithOrders = await db.user.findMany({
     where: { email: { in: ['alice@example.com', 'bob@example.com'] } },
     include: {
@@ -238,12 +238,20 @@ async function main(): Promise<void> {
         where: { status: 'paid' },
         orderBy: { total: 'desc' },
       },
-      _count: true,
+      _count: {
+        select: {
+          orders: { where: { status: 'paid' } },
+        },
+      },
     },
   });
 
+  const aliceSummary = usersWithOrders.find((u) => u.email === 'alice@example.com');
+  assert.strictEqual(aliceSummary?._count?.orders, 1);
+  assert.strictEqual(aliceSummary?.orders?.length, 1);
+
   for (const u of usersWithOrders) {
-    console.log(`  ✓ User "${u.name}" has ${u._count?.orders ?? 0} total order(s):`);
+    console.log(`  ✓ User "${u.name}" has ${u._count?.orders ?? 0} paid order(s):`);
     for (const o of u.orders || []) {
       console.log(`    - Order ${o.id}: total=$${o.total}, status=${o.status}`);
     }

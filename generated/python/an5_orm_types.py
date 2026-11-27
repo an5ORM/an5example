@@ -16,7 +16,7 @@ field names (`createdAt`) or snake_case aliases (`created_at`):
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, ClassVar
 from datetime import datetime
 
 # ─── Base filter types ────────────────────────────────────────────────────────
@@ -120,6 +120,13 @@ class OrderUpdateInput:
     created_at: Optional[datetime] = None
 
 @dataclass
+class OrderInclude:
+    """Type-safe eager relation loading and relation counts for Order queries."""
+    _an5_include: ClassVar[bool] = True
+    user: Optional[Union[bool, 'UserFindManyArgs', 'UserInclude', Dict[str, Any]]] = None
+    _count: Optional[Union[bool, Dict[str, Any]]] = None
+
+@dataclass
 class OrderFindManyArgs:
     """ORM-style args for Order.find_many()."""
     where: Optional[OrderWhereInput] = None
@@ -127,7 +134,7 @@ class OrderFindManyArgs:
     take: Optional[int] = None
     skip: int = 0
     select: Optional[Union[List[str], Dict[str, Any]]] = None
-    include: Optional[Dict[str, Any]] = None
+    include: Optional[Union['OrderInclude', Dict[str, Any]]] = None
 
 @dataclass
 class OrderFindFirstArgs:
@@ -135,7 +142,14 @@ class OrderFindFirstArgs:
     where: Optional[OrderWhereInput] = None
     order_by: Optional[OrderOrderByInput] = None
     select: Optional[Union[List[str], Dict[str, Any]]] = None
-    include: Optional[Dict[str, Any]] = None
+    include: Optional[Union['OrderInclude', Dict[str, Any]]] = None
+
+@dataclass
+class OrderFindUniqueArgs:
+    """ORM-style args for Order.find_unique()."""
+    where: Optional[OrderWhereInput] = None
+    select: Optional[Union[List[str], Dict[str, Any]]] = None
+    include: Optional[Union['OrderInclude', Dict[str, Any]]] = None
 
 @dataclass
 class OrderAggregateHavingInput:
@@ -218,6 +232,13 @@ class UserUpdateInput:
     created_at: Optional[datetime] = None
 
 @dataclass
+class UserInclude:
+    """Type-safe eager relation loading and relation counts for User queries."""
+    _an5_include: ClassVar[bool] = True
+    orders: Optional[Union[bool, 'OrderFindManyArgs', 'OrderInclude', Dict[str, Any]]] = None
+    _count: Optional[Union[bool, Dict[str, Any]]] = None
+
+@dataclass
 class UserFindManyArgs:
     """ORM-style args for User.find_many()."""
     where: Optional[UserWhereInput] = None
@@ -225,7 +246,7 @@ class UserFindManyArgs:
     take: Optional[int] = None
     skip: int = 0
     select: Optional[Union[List[str], Dict[str, Any]]] = None
-    include: Optional[Dict[str, Any]] = None
+    include: Optional[Union['UserInclude', Dict[str, Any]]] = None
 
 @dataclass
 class UserFindFirstArgs:
@@ -233,7 +254,14 @@ class UserFindFirstArgs:
     where: Optional[UserWhereInput] = None
     order_by: Optional[UserOrderByInput] = None
     select: Optional[Union[List[str], Dict[str, Any]]] = None
-    include: Optional[Dict[str, Any]] = None
+    include: Optional[Union['UserInclude', Dict[str, Any]]] = None
+
+@dataclass
+class UserFindUniqueArgs:
+    """ORM-style args for User.find_unique()."""
+    where: Optional[UserWhereInput] = None
+    select: Optional[Union[List[str], Dict[str, Any]]] = None
+    include: Optional[Union['UserInclude', Dict[str, Any]]] = None
 
 @dataclass
 class UserAggregateHavingInput:

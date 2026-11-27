@@ -23,8 +23,8 @@ export type OrderWhereInput = {
   user?: An5.RelationFilter<UserWhereInput>;
 };
 
-export type OrderSelect = { id?: boolean; userId?: boolean; total?: boolean; status?: boolean; createdAt?: boolean; user?: boolean | UserFindManyArgs; _count?: boolean | { select?: { user?: boolean } }; };
-export type OrderInclude = { user?: boolean | UserFindManyArgs; _count?: boolean | { select?: { user?: boolean } }; };
+export type OrderSelect = { id?: boolean; userId?: boolean; total?: boolean; status?: boolean; createdAt?: boolean; user?: boolean | UserFindManyArgs; _count?: boolean | { select?: { user?: boolean | { where?: UserWhereInput } } } | { user?: boolean | { where?: UserWhereInput } }; };
+export type OrderInclude = { user?: boolean | UserFindManyArgs; _count?: boolean | { select?: { user?: boolean | { where?: UserWhereInput } } } | { user?: boolean | { where?: UserWhereInput } }; };
 export type OrderCreateInput = { id?: string; userId: string; total?: number; status?: string | null; createdAt?: Date | string; user?: { create?: UserCreateInput | UserCreateInput[]; connect?: UserWhereInput | UserWhereInput[]; } };
 export type OrderUpdateInput = { userId?: string; total?: number | An5.IntFieldUpdateOperationsInput; status?: string | null; createdAt?: Date | string; user?: { create?: UserCreateInput | UserCreateInput[]; connect?: UserWhereInput | UserWhereInput[]; set?: UserWhereInput | UserWhereInput[]; disconnect?: UserWhereInput | UserWhereInput[]; delete?: UserWhereInput | UserWhereInput[]; update?: { where: UserWhereInput; data: UserUpdateInput; } | { where: UserWhereInput; data: UserUpdateInput; }[]; upsert?: { where: UserWhereInput; create: UserCreateInput; update: UserUpdateInput; } | { where: UserWhereInput; create: UserCreateInput; update: UserUpdateInput; }[]; } };
 export type OrderOrderByInput = { id?: An5.SortOrder; userId?: An5.SortOrder; total?: An5.SortOrder; status?: An5.SortOrder; createdAt?: An5.SortOrder };

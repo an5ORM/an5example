@@ -33,9 +33,14 @@ from an5_orm_types import (
     IntFilter,
     NumberFilter,
     OrderAggregateHavingInput,
+    OrderFindManyArgs,
     OrderGroupByArgs,
+    OrderInclude,
+    OrderOrderByInput,
     StringFilter,
     UserFindManyArgs,
+    UserFindUniqueArgs,
+    UserInclude,
     UserOrderByInput,
     UserWhereInput,
 )
@@ -301,7 +306,25 @@ def main():
         order_by={"created_at": "asc"},
     )
     assert len(snake_orders) == 1
-    print(f"  ✓ Typed dataclasses & snake_case keys matched {len(typed_users)} user(s)\n")
+
+    typed_include_alice = db.user.find_unique(
+        UserFindUniqueArgs(
+            where=UserWhereInput(id=StringFilter(equals=alice["id"])),
+            include=UserInclude(
+                orders=OrderFindManyArgs(
+                    order_by=OrderOrderByInput(total="desc"),
+                    take=1,
+                    include=OrderInclude(user=True),
+                ),
+                _count={"select": {"orders": {"where": {"status": "paid"}}}},
+            ),
+        )
+    )
+    assert typed_include_alice is not None
+    assert len(typed_include_alice["orders"]) == 1
+    assert typed_include_alice["orders"][0]["user"]["email"] == "alice@example.com"
+    assert typed_include_alice["_count"] == {"orders": 1}
+    print(f"  ✓ Typed dataclasses, UserInclude & snake_case keys matched {len(typed_users)} user(s)\n")
 
     # ───────────────────────────────────────────────────────────────────────────
     # 7. MUTATIONS: update, Field Math, upsert, and delete
