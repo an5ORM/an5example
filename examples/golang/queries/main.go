@@ -468,7 +468,65 @@ func main() {
 	if _, badErr := client.User.FindMany(ctx, "invalid-non-struct"); badErr == nil {
 		panic("expected error for non-struct FindMany args")
 	}
-	fmt.Print("  ✓ Strict validation: rejected contradictory RelationFilter & non-struct args\n\n")
+	fmt.Println("  ✓ Strict validation: rejected contradictory RelationFilter & non-struct args")
+
+	// Eager relation loading via Include and _count (batch IN hydration + per-parent Take)
+	usersIncluded, err := client.User.FindMany(ctx, &an5.UserFindManyArgs{
+		Where:   &an5.UserWhereInput{IsActive: &an5.BoolFilter{Equals: an5.BoolPtr(true)}},
+		OrderBy: &an5.UserOrderByInput{Name: an5.SortOrderPtr(an5.SortOrderAsc)},
+		Include: &an5.UserInclude{
+			Orders: &an5.OrderFindManyArgs{
+				OrderBy: &an5.OrderOrderByInput{Total: an5.SortOrderPtr(an5.SortOrderDesc)},
+				Take:    an5.IntPtr(2),
+			},
+			Count: true,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(usersIncluded) == 0 || usersIncluded[0].Count == nil {
+		panic("expected eager Include results and _count map")
+	}
+	fmt.Printf("  ✓ Eager Include (_count & nested Take): %s has count=%d, loaded=%d order(s)\n",
+		*usersIncluded[0].Name, usersIncluded[0].Count["orders"], len(usersIncluded[0].Orders))
+
+	ordersWithUsers, err := client.Order.FindMany(ctx, &an5.OrderFindManyArgs{
+		OrderBy: &an5.OrderOrderByInput{Total: an5.SortOrderPtr(an5.SortOrderDesc)},
+		Take:    an5.IntPtr(2),
+		Include: &an5.OrderInclude{User: true},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if len(ordersWithUsers) != 2 || ordersWithUsers[0].User == nil {
+		panic("expected hydrated User on Order Include")
+	}
+	fmt.Printf("  ✓ To-one Order Include: top order %s ($%d) owned by %s\n",
+		ordersWithUsers[0].Id, ordersWithUsers[0].Total, ordersWithUsers[0].User.Email)
+
+	aliceWithCount, err := client.User.FindUnique(ctx, &an5.UserFindUniqueArgs{
+		Where:  &an5.UserWhereInput{Id: &an5.StringFilter{Equals: an5.StringPtr(alice.Id)}},
+		Select: []string{"email"},
+		Include: &an5.UserInclude{
+			Orders: true,
+			Count: &an5.CountIncludeOptions{
+				Select: map[string]interface{}{
+					"orders": map[string]interface{}{
+						"where": &an5.OrderWhereInput{Status: &an5.StringFilter{Equals: an5.StringPtr("paid")}},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if aliceWithCount == nil || aliceWithCount.Id != "" || aliceWithCount.Count["orders"] != 1 || len(aliceWithCount.Orders) != 1 {
+		panic(fmt.Sprintf("unexpected FindUnique Select+Include result: %+v", aliceWithCount))
+	}
+	fmt.Printf("  ✓ FindUnique Select+Include: email=%s, strippedId=%q, paidCount=%d\n\n",
+		aliceWithCount.Email, aliceWithCount.Id, aliceWithCount.Count["orders"])
 
 	// ───────────────────────────────────────────────────────────────────────────
 	// 7. MUTATIONS: update, Field Math, upsert, and delete

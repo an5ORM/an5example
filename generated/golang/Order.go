@@ -15,6 +15,9 @@ type Order struct {
 
 	// Relations
 	User *User `json:"user,omitempty"`
+
+	// Relation counts (populated when requested via Include._count)
+	Count map[string]int `json:"_count,omitempty"`
 }
 
 // ─── Order ORM Types ──────────────────────────────────────────────────────────
@@ -57,6 +60,14 @@ type OrderUpdateInput struct {
 	CreatedAt *time.Time
 }
 
+// OrderInclude configures eager relation loading and _count for Order queries.
+type OrderInclude struct {
+	User interface{}
+	Count interface{} `json:"_count,omitempty"`
+}
+
+func (OrderInclude) isAn5Include() {}
+
 // OrderFindManyArgs provides ORM-style args for FindMany queries on Order.
 type OrderFindManyArgs struct {
 	Where   *OrderWhereInput
@@ -64,6 +75,7 @@ type OrderFindManyArgs struct {
 	Take    *int
 	Skip    *int
 	Select  []string
+	Include interface{}
 }
 
 // OrderFindFirstArgs provides ORM-style args for FindFirst queries on Order.
@@ -71,11 +83,14 @@ type OrderFindFirstArgs struct {
 	Where   *OrderWhereInput
 	OrderBy *OrderOrderByInput
 	Select  []string
+	Include interface{}
 }
 
 // OrderFindUniqueArgs provides ORM-style args for FindUnique queries on Order.
 type OrderFindUniqueArgs struct {
-	Where *OrderWhereInput
+	Where   *OrderWhereInput
+	Select  []string
+	Include interface{}
 }
 
 // OrderDeleteManyArgs provides ORM-style args for DeleteMany queries on Order.

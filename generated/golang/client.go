@@ -104,6 +104,25 @@ func (f RelationFilter[T]) rawRelationTargets() (interface{}, bool, interface{},
 	return f.Is, f.IsNull, f.IsNot, f.IsNotNull
 }
 
+type includeStructMarker interface {
+	isAn5Include()
+}
+
+// IncludeOptions configures nested eager relation loading (where, orderBy, take, skip, select, include).
+type IncludeOptions struct {
+	Where   interface{}
+	OrderBy interface{}
+	Take    *int
+	Skip    *int
+	Select  []string
+	Include interface{}
+}
+
+// CountIncludeOptions configures relation _count selection with optional per-relation filters.
+type CountIncludeOptions struct {
+	Select map[string]interface{}
+}
+
 // DateTimeFilter provides type-safe datetime field filtering options.
 type DateTimeFilter struct {
 	Equals *time.Time
@@ -196,6 +215,12 @@ func NewAn5DbContextWithConnStr(db *sql.DB, connStr string) *An5DbContext {
 	ctx.Users = clientUser
 	ctx.User  = clientUser
 	return ctx
+}
+
+// ModelTypes maps model names to reflect.Type for reflection-based eager relation hydration.
+var ModelTypes = map[string]reflect.Type{
+	"Order": reflect.TypeOf(Order{}),
+	"User": reflect.TypeOf(User{}),
 }
 
 // TableClient provides generic type-safe ORM operations for model T.
@@ -341,21 +366,38 @@ func (c *ViewClient[T]) GroupBy(ctx context.Context, args interface{}) ([]map[st
 
 // queryAndScan executes a raw SELECT and scans results into []T via db struct tags.
 func (c *TableClient[T]) queryAndScan(ctx context.Context, query string, args ...interface{}) ([]T, error) {
+	targetType := reflect.TypeOf((*T)(nil)).Elem()
+	for targetType.Kind() == reflect.Ptr {
+		targetType = targetType.Elem()
+	}
+	vals, err := c.queryAndScanReflect(ctx, targetType, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]T, len(vals))
+	for i, v := range vals {
+		results[i] = v.Interface().(T)
+	}
+	return results, nil
+}
+
+// queryAndScanReflect executes a SELECT query and scans each row into a struct of targetType.
+func (c *TableClient[T]) queryAndScanReflect(ctx context.Context, targetType reflect.Type, query string, args ...interface{}) ([]reflect.Value, error) {
 	rows, err := c.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var results []T
+	var results []reflect.Value
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, err
 	}
 
 	for rows.Next() {
-		var item T
-		val := reflect.ValueOf(&item).Elem()
+		ptrVal := reflect.New(targetType)
+		val := ptrVal.Elem()
 		scanArgs := make([]interface{}, len(cols))
 		vectorCols := make([]bool, len(cols))
 		for i, colName := range cols {
@@ -392,7 +434,7 @@ func (c *TableClient[T]) queryAndScan(ctx context.Context, query string, args ..
 			}
 			setVectorField(fieldVal, decoded)
 		}
-		results = append(results, item)
+		results = append(results, val)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -671,7 +713,27 @@ func modelHasFieldMeta(modelName, col string) bool {
 	return false
 }
 
-func resolveModelRelation(modelName, relKey string) (RelationDef, bool) {
+func resolveModelType(modelName string) (reflect.Type, bool) {
+	if typ, ok := ModelTypes[modelName]; ok {
+		return typ, true
+	}
+	for k, typ := range ModelTypes {
+		if strings.EqualFold(k, modelName) {
+			return typ, true
+		}
+	}
+	return nil, false
+}
+
+func resolveModelColumnName(modelName, col string) string {
+	trimmed := strings.TrimSpace(col)
+	if trimmed == "" {
+		return ""
+	}
+	return goToSnakeCase(trimmed)
+}
+
+func resolveModelRelationEntry(modelName, relKey string) (string, RelationDef, bool) {
 	rels, ok := RelationMap[modelName]
 	if !ok {
 		for k, v := range RelationMap {
@@ -683,18 +745,23 @@ func resolveModelRelation(modelName, relKey string) (RelationDef, bool) {
 		}
 	}
 	if !ok || len(rels) == 0 {
-		return RelationDef{}, false
+		return "", RelationDef{}, false
 	}
 	if def, exists := rels[relKey]; exists {
-		return def, true
+		return relKey, def, true
 	}
 	targetSnake := goToSnakeCase(relKey)
 	for k, def := range rels {
 		if strings.EqualFold(k, relKey) || goToSnakeCase(k) == targetSnake {
-			return def, true
+			return k, def, true
 		}
 	}
-	return RelationDef{}, false
+	return "", RelationDef{}, false
+}
+
+func resolveModelRelation(modelName, relKey string) (RelationDef, bool) {
+	_, def, ok := resolveModelRelationEntry(modelName, relKey)
+	return def, ok
 }
 
 func resolveRelationKeys(parentModel string, rel RelationDef) (string, string) {
@@ -736,29 +803,34 @@ func sanitizeRelationAlias(name string) string {
 // FindMany returns multiple records. Use model-specific FindManyArgs for type-safe filtering.
 // Example: db.User.FindMany(ctx, &UserFindManyArgs{ Where: &UserWhereInput{ Name: &StringFilter{Contains: "Jo"} } })
 func (c *TableClient[T]) FindMany(ctx context.Context, args interface{}) ([]T, error) {
-	clause, orderBy, take, skip, selectCols, queryArgs, err := c.parseArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	table := c.quoteTable()
-	var query string
+	return c.findManyWithLimit(ctx, args, 0)
+}
+
+func (c *TableClient[T]) buildSelectQuery(rawTable string, selectCols []string, clause string, orderBy string, hasTake bool, take int, skip int) string {
+	table := c.quoteTableName(rawTable)
+	selectExpr := "*"
 	if len(selectCols) > 0 {
 		quoted := make([]string, len(selectCols))
 		for i, col := range selectCols {
 			quoted[i] = c.quoteName(col)
 		}
-		query = "SELECT " + strings.Join(quoted, ", ") + " FROM " + table
-	} else {
-		query = "SELECT * FROM " + table
+		selectExpr = strings.Join(quoted, ", ")
 	}
+	prefix := "SELECT "
+	if c.Dialect == DialectMssql && skip == 0 && hasTake && take > 0 {
+		prefix = fmt.Sprintf("SELECT TOP (%d) ", take)
+	}
+	query := prefix + selectExpr + " FROM " + table
 	if clause != "" {
 		query += " WHERE " + clause
 	}
 	if orderBy != "" {
 		query += " " + orderBy
+	} else if c.Dialect == DialectMssql && skip > 0 {
+		query += " ORDER BY (SELECT NULL)"
 	}
 	if c.Dialect == DialectPostgres || c.Dialect == DialectSqlite {
-		if take > 0 {
+		if hasTake {
 			query += fmt.Sprintf(" LIMIT %d", take)
 		} else if skip > 0 {
 			if c.Dialect == DialectSqlite {
@@ -770,27 +842,62 @@ func (c *TableClient[T]) FindMany(ctx context.Context, args interface{}) ([]T, e
 		if skip > 0 {
 			query += fmt.Sprintf(" OFFSET %d", skip)
 		}
-	} else {
-		if skip > 0 {
-			query += fmt.Sprintf(" OFFSET %d ROWS", skip)
-			if take > 0 {
-				query += fmt.Sprintf(" FETCH NEXT %d ROWS ONLY", take)
-			}
-		} else if take > 0 {
-			// rewrite SELECT to SELECT TOP
-			query = strings.Replace(query, "SELECT *", fmt.Sprintf("SELECT TOP (%d) *", take), 1)
-			query = strings.Replace(query, "SELECT "+strings.Join(func() []string {
-				if len(selectCols) == 0 { return []string{"*"} }
-				return selectCols
-			}(), ", "), fmt.Sprintf("SELECT TOP (%d) *", take), 1)
+	} else if skip > 0 {
+		query += fmt.Sprintf(" OFFSET %d ROWS", skip)
+		if hasTake && take > 0 {
+			query += fmt.Sprintf(" FETCH NEXT %d ROWS ONLY", take)
 		}
 	}
-	return c.queryAndScan(ctx, query, queryArgs...)
+	return query
+}
+
+func (c *TableClient[T]) findManyWithLimit(ctx context.Context, args interface{}, defaultTake int) ([]T, error) {
+	clause, orderBy, hasTake, take, skip, selectCols, includeVal, queryArgs, err := c.parseArgsWithOffsetAndInclude(args, 1)
+	if err != nil {
+		return nil, err
+	}
+	if !hasTake && defaultTake > 0 {
+		hasTake = true
+		take = defaultTake
+	}
+	includeSpec, err := c.parseIncludeSpec(c.ModelName, includeVal)
+	if err != nil {
+		return nil, err
+	}
+	if hasTake && take == 0 {
+		return []T{}, nil
+	}
+	effectiveSelectCols := selectCols
+	var injectedCols []string
+	if len(selectCols) > 0 && includeSpec != nil && includeSpec.hasWork() {
+		effectiveSelectCols, injectedCols = c.augmentSelectWithJoinKeys(c.ModelName, selectCols, includeSpec)
+	}
+	query := c.buildSelectQuery(c.TableName, effectiveSelectCols, clause, orderBy, hasTake, take, skip)
+	results, err := c.queryAndScan(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) == 0 || (includeSpec == nil && len(injectedCols) == 0) {
+		return results, nil
+	}
+	parentVals := make([]reflect.Value, len(results))
+	for i := range results {
+		parentVals[i] = reflect.ValueOf(&results[i]).Elem()
+	}
+	if includeSpec != nil && includeSpec.hasWork() {
+		if err := c.hydrateIncludes(ctx, c.ModelName, parentVals, includeSpec); err != nil {
+			return nil, err
+		}
+	}
+	if len(injectedCols) > 0 {
+		clearInjectedCols(parentVals, injectedCols)
+	}
+	return results, nil
 }
 
 // FindFirst returns first record matching criteria.
 func (c *TableClient[T]) FindFirst(ctx context.Context, args interface{}) (*T, error) {
-	rows, err := c.FindMany(ctx, args)
+	rows, err := c.findManyWithLimit(ctx, args, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -1824,13 +1931,50 @@ func (c *TableClient[T]) GroupBy(ctx context.Context, args interface{}) ([]map[s
 	return results, nil
 }
 
+type an5IncludeSpec struct {
+	entries      map[string]*an5IncludeEntry
+	entryOrder   []string
+	countAll     bool
+	countEntries map[string]*an5CountEntry
+	countOrder   []string
+}
+
+func (s *an5IncludeSpec) hasWork() bool {
+	return s != nil && (len(s.entryOrder) > 0 || s.countAll || len(s.countOrder) > 0)
+}
+
+type an5IncludeEntry struct {
+	canonicalKey string
+	rel          RelationDef
+	subWhere     interface{}
+	subOrderBy   interface{}
+	hasTake      bool
+	take         int
+	hasSkip      bool
+	skip         int
+	subSelect    []string
+	subInclude   *an5IncludeSpec
+}
+
+type an5CountEntry struct {
+	canonicalKey string
+	rel          RelationDef
+	where        interface{}
+}
+
 // parseArgs is the generic where/orderBy/take/skip extractor.
-// It uses reflection to read WhereClause, OrderBy, Take, Skip, Select from any args struct.
+// It uses reflection to read Where, OrderBy, Take, Skip, Select from any args struct.
 func (c *TableClient[T]) parseArgs(args interface{}) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}, err error) {
-	return c.parseArgsWithOffset(args, 1)
+	whereClause, orderBy, _, take, skip, selectCols, _, queryArgs, err = c.parseArgsWithOffsetAndInclude(args, 1)
+	return
 }
 
 func (c *TableClient[T]) parseArgsWithOffset(args interface{}, offset int) (whereClause string, orderBy string, take int, skip int, selectCols []string, queryArgs []interface{}, err error) {
+	whereClause, orderBy, _, take, skip, selectCols, _, queryArgs, err = c.parseArgsWithOffsetAndInclude(args, offset)
+	return
+}
+
+func (c *TableClient[T]) parseArgsWithOffsetAndInclude(args interface{}, offset int) (whereClause string, orderBy string, hasTake bool, take int, skip int, selectCols []string, includeVal interface{}, queryArgs []interface{}, err error) {
 	if args == nil {
 		return
 	}
@@ -1883,25 +2027,1267 @@ func (c *TableClient[T]) parseArgsWithOffset(args interface{}, offset int) (wher
 
 	// Take
 	takeField := v.FieldByName("Take")
-	if takeField.IsValid() && !takeField.IsNil() {
-		take = int(takeField.Elem().Int())
+	if takeField.IsValid() {
+		if takeField.Kind() == reflect.Ptr {
+			if !takeField.IsNil() {
+				t := int(takeField.Elem().Int())
+				if t < 0 {
+					err = fmt.Errorf("take cannot be negative: %d", t)
+					return
+				}
+				hasTake = true
+				take = t
+			}
+		} else if takeField.Kind() >= reflect.Int && takeField.Kind() <= reflect.Int64 {
+			t := int(takeField.Int())
+			if t < 0 {
+				err = fmt.Errorf("take cannot be negative: %d", t)
+				return
+			}
+			if t > 0 {
+				hasTake = true
+				take = t
+			}
+		}
 	}
 
 	// Skip
 	skipField := v.FieldByName("Skip")
-	if skipField.IsValid() && !skipField.IsNil() {
-		skip = int(skipField.Elem().Int())
+	if skipField.IsValid() {
+		if skipField.Kind() == reflect.Ptr {
+			if !skipField.IsNil() {
+				s := int(skipField.Elem().Int())
+				if s < 0 {
+					err = fmt.Errorf("skip cannot be negative: %d", s)
+					return
+				}
+				skip = s
+			}
+		} else if skipField.Kind() >= reflect.Int && skipField.Kind() <= reflect.Int64 {
+			s := int(skipField.Int())
+			if s < 0 {
+				err = fmt.Errorf("skip cannot be negative: %d", s)
+				return
+			}
+			skip = s
+		}
 	}
 
 	// Select
 	selectField := v.FieldByName("Select")
 	if selectField.IsValid() && selectField.Kind() == reflect.Slice && !selectField.IsNil() {
-		for i := 0; i < selectField.Len(); i++ {
-			selectCols = append(selectCols, selectField.Index(i).String())
+		selectCols, err = c.parseSelectCols(c.ModelName, selectField.Interface(), true)
+		if err != nil {
+			return
 		}
 	}
 
+	// Include
+	includeField := v.FieldByName("Include")
+	if includeField.IsValid() && !includeField.IsNil() {
+		includeVal = includeField.Interface()
+	}
+
 	return
+}
+
+func (c *TableClient[T]) parseSelectCols(modelName string, raw interface{}, allowEmptySlice bool) ([]string, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	rv, present := isPtrTargetPresent(raw)
+	if !present {
+		return nil, nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	addCol := func(rawCol string) error {
+		trimmed := strings.TrimSpace(rawCol)
+		if trimmed == "" {
+			return fmt.Errorf("select column name for '%s' cannot be empty", modelName)
+		}
+		if len(ModelFields) > 0 && !modelHasFieldMeta(modelName, trimmed) {
+			return fmt.Errorf("unknown column '%s' in select for model '%s'", trimmed, modelName)
+		}
+		col := resolveModelColumnName(modelName, trimmed)
+		if !seen[col] {
+			seen[col] = true
+			out = append(out, col)
+		}
+		return nil
+	}
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		if !allowEmptySlice && rv.Len() == 0 {
+			return nil, fmt.Errorf("select slice for '%s' cannot be empty", modelName)
+		}
+		for i := 0; i < rv.Len(); i++ {
+			elem := rv.Index(i)
+			for elem.Kind() == reflect.Interface {
+				if elem.IsNil() {
+					return nil, fmt.Errorf("select column name for '%s' cannot be nil", modelName)
+				}
+				elem = elem.Elem()
+			}
+			if elem.Kind() != reflect.String {
+				return nil, fmt.Errorf("select columns for '%s' must be strings, got %s", modelName, elem.Kind().String())
+			}
+			if err := addCol(elem.String()); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return nil, fmt.Errorf("select map keys for '%s' must be strings", modelName)
+		}
+		keys := make([]string, 0, rv.Len())
+		for _, mk := range rv.MapKeys() {
+			keys = append(keys, mk.String())
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if len(ModelFields) > 0 && !modelHasFieldMeta(modelName, k) {
+				return nil, fmt.Errorf("unknown column '%s' in select for model '%s'", k, modelName)
+			}
+			mv := rv.MapIndex(reflect.ValueOf(k)).Interface()
+			b, ok := mv.(bool)
+			if !ok {
+				return nil, fmt.Errorf("select map value for '%s.%s' must be bool, got %T", modelName, k, mv)
+			}
+			if b {
+				if err := addCol(k); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("select map for '%s' must select at least one column", modelName)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("select for '%s' must be []string or map[string]bool, got %T", modelName, raw)
+	}
+}
+
+func (c *TableClient[T]) parseOrderByWithModel(modelName string, val interface{}) (string, error) {
+	if val == nil {
+		return "", nil
+	}
+	if s, ok := val.(string); ok {
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "" {
+			return "", nil
+		}
+		return "ORDER BY " + trimmed, nil
+	}
+	rv, present := isPtrTargetPresent(val)
+	if !present {
+		return "", nil
+	}
+	var entries []reflect.Value
+	if rv.Kind() == reflect.Slice {
+		for i := 0; i < rv.Len(); i++ {
+			entries = append(entries, rv.Index(i))
+		}
+	} else {
+		entries = []reflect.Value{rv}
+	}
+	var parts []string
+	for _, entry := range entries {
+		cur := entry
+		for cur.Kind() == reflect.Ptr || cur.Kind() == reflect.Interface {
+			if cur.IsNil() {
+				break
+			}
+			cur = cur.Elem()
+		}
+		if cur.Kind() == reflect.Ptr || cur.Kind() == reflect.Interface {
+			continue
+		}
+		switch cur.Kind() {
+		case reflect.String:
+			trimmed := strings.TrimSpace(cur.String())
+			if trimmed != "" {
+				parts = append(parts, trimmed)
+			}
+		case reflect.Struct:
+			typ := cur.Type()
+			if !strings.HasSuffix(typ.Name(), "OrderByInput") || !strings.EqualFold(typ.Name(), modelName+"OrderByInput") {
+				return "", fmt.Errorf("orderBy struct '%s' is not valid for model '%s'", typ.Name(), modelName)
+			}
+			for i := 0; i < cur.NumField(); i++ {
+				fv := cur.Field(i)
+				var rawDir string
+				var set bool
+				if fv.Kind() == reflect.Ptr && !fv.IsNil() {
+					rawDir = fv.Elem().String()
+					set = true
+				} else if fv.Kind() == reflect.String && fv.String() != "" {
+					rawDir = fv.String()
+					set = true
+				}
+				if !set {
+					continue
+				}
+				dir := strings.ToUpper(strings.TrimSpace(rawDir))
+				if dir != "ASC" && dir != "DESC" {
+					return "", fmt.Errorf("invalid sort direction '%s' in orderBy for '%s'", rawDir, modelName)
+				}
+				parts = append(parts, c.quoteName(goToSnakeCase(typ.Field(i).Name))+" "+dir)
+			}
+		case reflect.Map:
+			if cur.Type().Key().Kind() != reflect.String {
+				return "", fmt.Errorf("orderBy map keys for '%s' must be strings", modelName)
+			}
+			mapKeys := make([]string, 0, cur.Len())
+			for _, mk := range cur.MapKeys() {
+				mapKeys = append(mapKeys, mk.String())
+			}
+			sort.Strings(mapKeys)
+			for _, k := range mapKeys {
+				if len(ModelFields) > 0 && !modelHasFieldMeta(modelName, k) {
+					return "", fmt.Errorf("unknown field '%s' in orderBy for model '%s'", k, modelName)
+				}
+				mv := cur.MapIndex(reflect.ValueOf(k)).Interface()
+				switch d := mv.(type) {
+				case string:
+					dir := strings.ToUpper(strings.TrimSpace(d))
+					if dir != "ASC" && dir != "DESC" {
+						return "", fmt.Errorf("invalid sort direction '%s' in orderBy for '%s.%s'", d, modelName, k)
+					}
+					parts = append(parts, c.quoteName(goToSnakeCase(k))+" "+dir)
+				case SortOrder:
+					dir := strings.ToUpper(strings.TrimSpace(string(d)))
+					if dir != "ASC" && dir != "DESC" {
+						return "", fmt.Errorf("invalid sort direction '%s' in orderBy for '%s.%s'", string(d), modelName, k)
+					}
+					parts = append(parts, c.quoteName(goToSnakeCase(k))+" "+dir)
+				case *SortOrder:
+					if d != nil {
+						dir := strings.ToUpper(strings.TrimSpace(string(*d)))
+						if dir != "ASC" && dir != "DESC" {
+							return "", fmt.Errorf("invalid sort direction '%s' in orderBy for '%s.%s'", string(*d), modelName, k)
+						}
+						parts = append(parts, c.quoteName(goToSnakeCase(k))+" "+dir)
+					}
+				default:
+					return "", fmt.Errorf("invalid sort direction value %T in orderBy for '%s.%s'", mv, modelName, k)
+				}
+			}
+		default:
+			return "", fmt.Errorf("unsupported orderBy value type %s for model '%s'", cur.Type().String(), modelName)
+		}
+	}
+	if len(parts) == 0 {
+		return "", nil
+	}
+	return "ORDER BY " + strings.Join(parts, ", "), nil
+}
+
+func toNonNegativeInt(raw interface{}, fieldName string, relKey string) (bool, int, error) {
+	if raw == nil {
+		return false, 0, nil
+	}
+	rv := reflect.ValueOf(raw)
+	for rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return false, 0, nil
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n := int(rv.Int())
+		if n < 0 {
+			return false, 0, fmt.Errorf("include.%s for relation '%s' cannot be negative: %d", fieldName, relKey, n)
+		}
+		return true, n, nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true, int(rv.Uint()), nil
+	default:
+		return false, 0, fmt.Errorf("include.%s for relation '%s' must be an integer, got %T", fieldName, relKey, raw)
+	}
+}
+
+func (c *TableClient[T]) parseIncludeSpec(modelName string, raw interface{}) (*an5IncludeSpec, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	rv, present := isPtrTargetPresent(raw)
+	if !present {
+		return nil, nil
+	}
+	spec := &an5IncludeSpec{
+		entries: make(map[string]*an5IncludeEntry),
+	}
+
+	if rv.Kind() == reflect.Struct {
+		_, isMarker := rv.Interface().(includeStructMarker)
+		if !isMarker {
+			return nil, fmt.Errorf("unsupported include struct '%s' for model '%s'", rv.Type().String(), modelName)
+		}
+		typeName := rv.Type().Name()
+		if typeName != "" && !strings.EqualFold(typeName, modelName+"Include") {
+			return nil, fmt.Errorf("include struct '%s' does not match model '%s'", typeName, modelName)
+		}
+		typ := rv.Type()
+		for i := 0; i < typ.NumField(); i++ {
+			sf := typ.Field(i)
+			fv := rv.Field(i)
+			if fv.Kind() == reflect.Interface && fv.IsNil() {
+				continue
+			}
+			if fv.Kind() == reflect.Ptr && fv.IsNil() {
+				continue
+			}
+			jsonTag := strings.Split(sf.Tag.Get("json"), ",")[0]
+			if jsonTag == "_count" {
+				if err := c.parseCountSpec(modelName, fv.Interface(), spec); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			canonKey, rel, ok := resolveModelRelationEntry(modelName, sf.Name)
+			if !ok {
+				return nil, fmt.Errorf("unknown relation '%s' in include for model '%s'", sf.Name, modelName)
+			}
+			entry, err := c.parseRelationIncludeOption(modelName, canonKey, rel, fv.Interface())
+			if err != nil {
+				return nil, err
+			}
+			if entry == nil {
+				delete(spec.entries, canonKey)
+				continue
+			}
+			if _, existed := spec.entries[canonKey]; !existed {
+				spec.entryOrder = append(spec.entryOrder, canonKey)
+			}
+			spec.entries[canonKey] = entry
+		}
+		return spec, nil
+	}
+
+	if rv.Kind() == reflect.Map {
+		if rv.Type().Key().Kind() != reflect.String {
+			return nil, fmt.Errorf("include map keys for '%s' must be strings", modelName)
+		}
+		keys := make([]string, 0, rv.Len())
+		for _, mk := range rv.MapKeys() {
+			keys = append(keys, mk.String())
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			mv := rv.MapIndex(reflect.ValueOf(k)).Interface()
+			if strings.EqualFold(k, "_count") {
+				if err := c.parseCountSpec(modelName, mv, spec); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			canonKey, rel, ok := resolveModelRelationEntry(modelName, k)
+			if !ok {
+				return nil, fmt.Errorf("unknown relation '%s' in include for model '%s'", k, modelName)
+			}
+			if mv == nil {
+				continue
+			}
+			entry, err := c.parseRelationIncludeOption(modelName, canonKey, rel, mv)
+			if err != nil {
+				return nil, err
+			}
+			if entry == nil {
+				delete(spec.entries, canonKey)
+				continue
+			}
+			if _, existed := spec.entries[canonKey]; !existed {
+				spec.entryOrder = append(spec.entryOrder, canonKey)
+			}
+			spec.entries[canonKey] = entry
+		}
+		return spec, nil
+	}
+
+	return nil, fmt.Errorf("unsupported include payload type %T for model '%s'", raw, modelName)
+}
+
+func (c *TableClient[T]) parseCountSpec(modelName string, raw interface{}, spec *an5IncludeSpec) error {
+	if raw == nil {
+		return nil
+	}
+	if b, ok := raw.(bool); ok {
+		if b {
+			spec.countAll = true
+			spec.countEntries = nil
+			spec.countOrder = nil
+		} else {
+			spec.countAll = false
+			spec.countEntries = nil
+			spec.countOrder = nil
+		}
+		return nil
+	}
+	rv, present := isPtrTargetPresent(raw)
+	if !present {
+		return nil
+	}
+	var selectRaw interface{}
+	if rv.Kind() == reflect.Struct {
+		opt, ok := rv.Interface().(CountIncludeOptions)
+		if !ok {
+			return fmt.Errorf("unsupported _count struct '%s' for model '%s'", rv.Type().String(), modelName)
+		}
+		selectRaw = opt.Select
+	} else if rv.Kind() == reflect.Map {
+		if rv.Type().Key().Kind() != reflect.String {
+			return fmt.Errorf("_count map keys for '%s' must be strings", modelName)
+		}
+		keys := make([]string, 0, rv.Len())
+		for _, mk := range rv.MapKeys() {
+			keys = append(keys, mk.String())
+		}
+		sort.Strings(keys)
+		hasSelect := false
+		for _, k := range keys {
+			if strings.EqualFold(k, "select") {
+				hasSelect = true
+				selectRaw = rv.MapIndex(reflect.ValueOf(k)).Interface()
+			}
+		}
+		if hasSelect {
+			for _, k := range keys {
+				if !strings.EqualFold(k, "select") {
+					return fmt.Errorf("unknown option '%s' in _count for model '%s'", k, modelName)
+				}
+			}
+		} else {
+			selectRaw = rv.Interface()
+		}
+	} else {
+		return fmt.Errorf("unsupported _count value type %T for model '%s'", raw, modelName)
+	}
+
+	srv, sPresent := isPtrTargetPresent(selectRaw)
+	if !sPresent {
+		return nil
+	}
+	if srv.Kind() != reflect.Map || srv.Type().Key().Kind() != reflect.String {
+		return fmt.Errorf("_count.select for model '%s' must be a map", modelName)
+	}
+	spec.countAll = false
+	if spec.countEntries == nil {
+		spec.countEntries = make(map[string]*an5CountEntry)
+	}
+	skeys := make([]string, 0, srv.Len())
+	for _, mk := range srv.MapKeys() {
+		skeys = append(skeys, mk.String())
+	}
+	sort.Strings(skeys)
+	for _, k := range skeys {
+		canonKey, rel, ok := resolveModelRelationEntry(modelName, k)
+		if !ok {
+			return fmt.Errorf("unknown relation '%s' in _count for model '%s'", k, modelName)
+		}
+		if rel.RelationType != "many" {
+			return fmt.Errorf("relation '%s' on '%s' is to-one and cannot be counted in _count", canonKey, modelName)
+		}
+		sv := srv.MapIndex(reflect.ValueOf(k)).Interface()
+		if sv == nil {
+			continue
+		}
+		if b, ok := sv.(bool); ok {
+			if !b {
+				delete(spec.countEntries, canonKey)
+				continue
+			}
+			if _, existed := spec.countEntries[canonKey]; !existed {
+				spec.countOrder = append(spec.countOrder, canonKey)
+			}
+			spec.countEntries[canonKey] = &an5CountEntry{canonicalKey: canonKey, rel: rel}
+			continue
+		}
+		optVal, optPresent := isPtrTargetPresent(sv)
+		if !optPresent || optVal.Kind() != reflect.Map || optVal.Type().Key().Kind() != reflect.String {
+			return fmt.Errorf("_count.%s on '%s' must be bool or map with 'where'", canonKey, modelName)
+		}
+		var countWhere interface{}
+		for _, omk := range optVal.MapKeys() {
+			okStr := omk.String()
+			if !strings.EqualFold(okStr, "where") {
+				return fmt.Errorf("unknown option '%s' in _count.%s for model '%s'", okStr, canonKey, modelName)
+			}
+			countWhere = optVal.MapIndex(omk).Interface()
+		}
+		if countWhere != nil {
+			if _, _, err := c.buildWhereValueWithContext(countWhere, rel.ModelName, 1, "", "", ""); err != nil {
+				return err
+			}
+		}
+		if _, existed := spec.countEntries[canonKey]; !existed {
+			spec.countOrder = append(spec.countOrder, canonKey)
+		}
+		spec.countEntries[canonKey] = &an5CountEntry{canonicalKey: canonKey, rel: rel, where: countWhere}
+	}
+	return nil
+}
+
+func (c *TableClient[T]) parseRelationIncludeOption(parentModel string, canonKey string, rel RelationDef, raw interface{}) (*an5IncludeEntry, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	if b, ok := raw.(bool); ok {
+		if !b {
+			return nil, nil
+		}
+		return &an5IncludeEntry{canonicalKey: canonKey, rel: rel}, nil
+	}
+	rv, present := isPtrTargetPresent(raw)
+	if !present {
+		return nil, nil
+	}
+	if _, isIncStruct := rv.Interface().(includeStructMarker); isIncStruct {
+		subSpec, err := c.parseIncludeSpec(rel.ModelName, rv.Interface())
+		if err != nil {
+			return nil, err
+		}
+		return &an5IncludeEntry{
+			canonicalKey: canonKey,
+			rel:          rel,
+			subInclude:   subSpec,
+		}, nil
+	}
+
+	var subWhere interface{}
+	var subOrderBy interface{}
+	var rawTake interface{}
+	var rawSkip interface{}
+	var rawSelect interface{}
+	var rawSubInclude interface{}
+	allowEmptySelectSlice := false
+
+	switch rv.Kind() {
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return nil, fmt.Errorf("include options map keys for '%s' on '%s' must be strings", canonKey, parentModel)
+		}
+		for _, mk := range rv.MapKeys() {
+			k := mk.String()
+			mv := rv.MapIndex(mk).Interface()
+			switch strings.ToLower(k) {
+			case "where":
+				subWhere = mv
+			case "orderby":
+				subOrderBy = mv
+			case "take":
+				rawTake = mv
+			case "skip":
+				rawSkip = mv
+			case "select":
+				rawSelect = mv
+			case "include":
+				rawSubInclude = mv
+			default:
+				return nil, fmt.Errorf("unknown include option '%s' for relation '%s' on '%s'", k, canonKey, parentModel)
+			}
+		}
+	case reflect.Struct:
+		typeName := rv.Type().Name()
+		if strings.HasSuffix(typeName, "FindManyArgs") || strings.HasSuffix(typeName, "FindFirstArgs") || strings.HasSuffix(typeName, "FindUniqueArgs") {
+			if !strings.HasPrefix(strings.ToLower(typeName), strings.ToLower(rel.ModelName)) {
+				return nil, fmt.Errorf("include args struct '%s' does not match target model '%s' for relation '%s'", typeName, rel.ModelName, canonKey)
+			}
+		} else if typeName != "IncludeOptions" {
+			return nil, fmt.Errorf("unsupported include option struct '%s' for relation '%s' on '%s'", rv.Type().String(), canonKey, parentModel)
+		}
+		allowEmptySelectSlice = true
+		if f := rv.FieldByName("Where"); f.IsValid() && !(f.Kind() == reflect.Ptr && f.IsNil()) && !(f.Kind() == reflect.Interface && f.IsNil()) {
+			subWhere = f.Interface()
+		}
+		if f := rv.FieldByName("OrderBy"); f.IsValid() && !(f.Kind() == reflect.Ptr && f.IsNil()) && !(f.Kind() == reflect.Interface && f.IsNil()) {
+			subOrderBy = f.Interface()
+		}
+		if f := rv.FieldByName("Take"); f.IsValid() && !(f.Kind() == reflect.Ptr && f.IsNil()) && !(f.Kind() == reflect.Interface && f.IsNil()) {
+			rawTake = f.Interface()
+		}
+		if f := rv.FieldByName("Skip"); f.IsValid() && !(f.Kind() == reflect.Ptr && f.IsNil()) && !(f.Kind() == reflect.Interface && f.IsNil()) {
+			rawSkip = f.Interface()
+		}
+		if f := rv.FieldByName("Select"); f.IsValid() && !f.IsNil() {
+			rawSelect = f.Interface()
+		}
+		if f := rv.FieldByName("Include"); f.IsValid() && !(f.Kind() == reflect.Ptr && f.IsNil()) && !(f.Kind() == reflect.Interface && f.IsNil()) {
+			rawSubInclude = f.Interface()
+		}
+	default:
+		return nil, fmt.Errorf("unsupported include option type %T for relation '%s' on '%s'", raw, canonKey, parentModel)
+	}
+
+	if subWhere != nil {
+		if _, _, err := c.buildWhereValueWithContext(subWhere, rel.ModelName, 1, "", "", ""); err != nil {
+			return nil, err
+		}
+	}
+	if subOrderBy != nil {
+		if _, err := c.parseOrderByWithModel(rel.ModelName, subOrderBy); err != nil {
+			return nil, err
+		}
+	}
+	hasTake, take, err := toNonNegativeInt(rawTake, "take", canonKey)
+	if err != nil {
+		return nil, err
+	}
+	_, skip, err := toNonNegativeInt(rawSkip, "skip", canonKey)
+	if err != nil {
+		return nil, err
+	}
+	subSelect, err := c.parseSelectCols(rel.ModelName, rawSelect, allowEmptySelectSlice)
+	if err != nil {
+		return nil, err
+	}
+	subInclude, err := c.parseIncludeSpec(rel.ModelName, rawSubInclude)
+	if err != nil {
+		return nil, err
+	}
+
+	return &an5IncludeEntry{
+		canonicalKey: canonKey,
+		rel:          rel,
+		subWhere:     subWhere,
+		subOrderBy:   subOrderBy,
+		hasTake:      hasTake,
+		take:         take,
+		hasSkip:      skip > 0,
+		skip:         skip,
+		subSelect:    subSelect,
+		subInclude:   subInclude,
+	}, nil
+}
+
+func (c *TableClient[T]) augmentSelectWithJoinKeys(modelName string, selectCols []string, spec *an5IncludeSpec) ([]string, []string) {
+	if len(selectCols) == 0 || spec == nil || !spec.hasWork() {
+		return selectCols, nil
+	}
+	existing := make(map[string]bool, len(selectCols))
+	effective := make([]string, len(selectCols))
+	for i, col := range selectCols {
+		resolved := resolveModelColumnName(modelName, col)
+		existing[strings.ToLower(resolved)] = true
+		effective[i] = resolved
+	}
+	var injected []string
+	addJoinCol := func(joinCol string) {
+		resolved := resolveModelColumnName(modelName, joinCol)
+		if resolved == "" || existing[strings.ToLower(resolved)] {
+			return
+		}
+		existing[strings.ToLower(resolved)] = true
+		effective = append(effective, resolved)
+		injected = append(injected, resolved)
+	}
+	for _, key := range spec.entryOrder {
+		entry := spec.entries[key]
+		_, parentKey := resolveRelationKeys(modelName, entry.rel)
+		addJoinCol(parentKey)
+	}
+	for _, ce := range c.resolveCountEntries(modelName, spec) {
+		_, parentKey := resolveRelationKeys(modelName, ce.rel)
+		addJoinCol(parentKey)
+	}
+	return effective, injected
+}
+
+func (c *TableClient[T]) resolveCountEntries(modelName string, spec *an5IncludeSpec) []*an5CountEntry {
+	if spec == nil {
+		return nil
+	}
+	var entries []*an5CountEntry
+	if spec.countAll {
+		rels, ok := RelationMap[modelName]
+		if !ok {
+			for k, v := range RelationMap {
+				if strings.EqualFold(k, modelName) {
+					rels = v
+					ok = true
+					break
+				}
+			}
+		}
+		if ok {
+			keys := make([]string, 0, len(rels))
+			for rk, rel := range rels {
+				if rel.RelationType == "many" {
+					keys = append(keys, rk)
+				}
+			}
+			sort.Strings(keys)
+			for _, rk := range keys {
+				entries = append(entries, &an5CountEntry{canonicalKey: rk, rel: rels[rk]})
+			}
+		}
+		return entries
+	}
+	for _, rk := range spec.countOrder {
+		if ce, ok := spec.countEntries[rk]; ok {
+			entries = append(entries, ce)
+		}
+	}
+	return entries
+}
+
+func clearInjectedCols(vals []reflect.Value, injectedCols []string) {
+	for _, v := range vals {
+		for _, col := range injectedCols {
+			fv := findFieldByDbTag(v, col)
+			if fv.IsValid() && fv.CanSet() {
+				fv.Set(reflect.Zero(fv.Type()))
+			}
+		}
+	}
+}
+
+func normalizeJoinKey(v interface{}) (interface{}, string, bool) {
+	if v == nil {
+		return nil, "", false
+	}
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return nil, "", false
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.String:
+		s := rv.String()
+		return s, "s:" + s, true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n := rv.Int()
+		return n, fmt.Sprintf("i:%d", n), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u := rv.Uint()
+		return u, fmt.Sprintf("u:%d", u), true
+	case reflect.Float32, reflect.Float64:
+		f := rv.Float()
+		return f, fmt.Sprintf("f:%g", f), true
+	case reflect.Bool:
+		b := rv.Bool()
+		return b, fmt.Sprintf("b:%t", b), true
+	case reflect.Slice:
+		if rv.Type().Elem().Kind() == reflect.Uint8 {
+			s := string(rv.Bytes())
+			return s, "s:" + s, true
+		}
+	}
+	raw := rv.Interface()
+	return raw, fmt.Sprintf("v:%T:%v", raw, raw), true
+}
+
+func extractJoinKeyValue(rowVal reflect.Value, colName string) (interface{}, string, bool) {
+	fv := findFieldByDbTag(rowVal, colName)
+	if !fv.IsValid() {
+		return nil, "", false
+	}
+	return normalizeJoinKey(fv.Interface())
+}
+
+func (c *TableClient[T]) hydrateIncludes(ctx context.Context, modelName string, parentVals []reflect.Value, spec *an5IncludeSpec) error {
+	if len(parentVals) == 0 || spec == nil || !spec.hasWork() {
+		return nil
+	}
+
+	if err := c.hydrateCountIncludes(ctx, modelName, parentVals, spec); err != nil {
+		return err
+	}
+
+	for _, canonKey := range spec.entryOrder {
+		entry := spec.entries[canonKey]
+		isMany := entry.rel.RelationType == "many"
+		childKey, parentKey := resolveRelationKeys(modelName, entry.rel)
+
+		var uniqueVals []interface{}
+		uniqueSeen := make(map[string]bool)
+		for _, pv := range parentVals {
+			rawVal, mapKey, ok := extractJoinKeyValue(pv, parentKey)
+			if ok && !uniqueSeen[mapKey] {
+				uniqueSeen[mapKey] = true
+				uniqueVals = append(uniqueVals, rawVal)
+			}
+		}
+
+		setEmptyRel := func() {
+			for _, pv := range parentVals {
+				rf := findRelationField(pv, canonKey)
+				if !rf.IsValid() || !rf.CanSet() {
+					continue
+				}
+				if isMany && rf.Kind() == reflect.Slice {
+					rf.Set(reflect.MakeSlice(rf.Type(), 0, 0))
+				} else {
+					rf.Set(reflect.Zero(rf.Type()))
+				}
+			}
+		}
+
+		if len(uniqueVals) == 0 || (isMany && entry.hasTake && entry.take == 0) {
+			setEmptyRel()
+			continue
+		}
+
+		childType, ok := resolveModelType(entry.rel.ModelName)
+		if !ok {
+			return fmt.Errorf("target model type '%s' not found in ModelTypes", entry.rel.ModelName)
+		}
+
+		effectiveSelect := entry.subSelect
+		var childInjected []string
+		if len(effectiveSelect) > 0 {
+			selSet := make(map[string]bool, len(effectiveSelect))
+			for _, col := range effectiveSelect {
+				selSet[strings.ToLower(col)] = true
+			}
+			ensureChildCol := func(col string) {
+				resolved := resolveModelColumnName(entry.rel.ModelName, col)
+				if resolved == "" || selSet[strings.ToLower(resolved)] {
+					return
+				}
+				selSet[strings.ToLower(resolved)] = true
+				effectiveSelect = append(effectiveSelect, resolved)
+				childInjected = append(childInjected, resolved)
+			}
+			ensureChildCol(childKey)
+			if entry.subInclude != nil && entry.subInclude.hasWork() {
+				for _, subKey := range entry.subInclude.entryOrder {
+					_, subParentKey := resolveRelationKeys(entry.rel.ModelName, entry.subInclude.entries[subKey].rel)
+					ensureChildCol(subParentKey)
+				}
+				for _, ce := range c.resolveCountEntries(entry.rel.ModelName, entry.subInclude) {
+					_, subParentKey := resolveRelationKeys(entry.rel.ModelName, ce.rel)
+					ensureChildCol(subParentKey)
+				}
+			}
+		}
+
+		var childArgs []interface{}
+		phs := make([]string, len(uniqueVals))
+		for i, v := range uniqueVals {
+			childArgs = append(childArgs, v)
+			phs[i] = c.ph(len(childArgs))
+		}
+		whereSQL := c.quoteName(childKey) + " IN (" + strings.Join(phs, ", ") + ")"
+		if entry.subWhere != nil {
+			subClause, subArgs, err := c.buildWhereValueWithContext(entry.subWhere, entry.rel.ModelName, len(childArgs)+1, "", "", "")
+			if err != nil {
+				return err
+			}
+			if subClause != "" {
+				whereSQL += " AND (" + subClause + ")"
+				childArgs = append(childArgs, subArgs...)
+			}
+		}
+		orderBySQL, err := c.parseOrderByWithModel(entry.rel.ModelName, entry.subOrderBy)
+		if err != nil {
+			return err
+		}
+		childQuery := c.buildSelectQuery(resolveModelTable(entry.rel.ModelName), effectiveSelect, whereSQL, orderBySQL, false, 0, 0)
+		childVals, err := c.queryAndScanReflect(ctx, childType, childQuery, childArgs...)
+		if err != nil {
+			return err
+		}
+
+		type childRef struct {
+			idx int
+		}
+		grouped := make(map[string][]childRef)
+		for idx, cv := range childVals {
+			_, childMapKey, ok := extractJoinKeyValue(cv, childKey)
+			if !ok {
+				continue
+			}
+			grouped[childMapKey] = append(grouped[childMapKey], childRef{idx: idx})
+		}
+
+		slicedByKey := make(map[string][]int)
+		var survivingVals []reflect.Value
+		survivingSeen := make(map[int]bool)
+		for k, refs := range grouped {
+			if !isMany {
+				if len(refs) > 0 {
+					idx := refs[0].idx
+					slicedByKey[k] = []int{idx}
+					if !survivingSeen[idx] {
+						survivingSeen[idx] = true
+						survivingVals = append(survivingVals, childVals[idx])
+					}
+				}
+				continue
+			}
+			start := 0
+			if entry.hasSkip && entry.skip > 0 {
+				start = entry.skip
+			}
+			if start >= len(refs) {
+				continue
+			}
+			var picked []int
+			for i := start; i < len(refs); i++ {
+				if entry.hasTake && len(picked) >= entry.take {
+					break
+				}
+				idx := refs[i].idx
+				picked = append(picked, idx)
+				if !survivingSeen[idx] {
+					survivingSeen[idx] = true
+					survivingVals = append(survivingVals, childVals[idx])
+				}
+			}
+			slicedByKey[k] = picked
+		}
+
+		if entry.subInclude != nil && entry.subInclude.hasWork() && len(survivingVals) > 0 {
+			if err := c.hydrateIncludes(ctx, entry.rel.ModelName, survivingVals, entry.subInclude); err != nil {
+				return err
+			}
+		}
+		if len(childInjected) > 0 && len(survivingVals) > 0 {
+			clearInjectedCols(survivingVals, childInjected)
+		}
+
+		for _, pv := range parentVals {
+			rf := findRelationField(pv, canonKey)
+			if !rf.IsValid() || !rf.CanSet() {
+				continue
+			}
+			_, parentMapKey, ok := extractJoinKeyValue(pv, parentKey)
+			var matchedIdxs []int
+			if ok {
+				matchedIdxs = slicedByKey[parentMapKey]
+			}
+			if isMany && rf.Kind() == reflect.Slice {
+				sliceVal := reflect.MakeSlice(rf.Type(), len(matchedIdxs), len(matchedIdxs))
+				elemType := rf.Type().Elem()
+				for i, cIdx := range matchedIdxs {
+					cv := childVals[cIdx]
+					if elemType.Kind() == reflect.Ptr {
+						ptr := reflect.New(elemType.Elem())
+						ptr.Elem().Set(cv)
+						sliceVal.Index(i).Set(ptr)
+					} else {
+						sliceVal.Index(i).Set(cv)
+					}
+				}
+				rf.Set(sliceVal)
+			} else {
+				if len(matchedIdxs) > 0 {
+					cv := childVals[matchedIdxs[0]]
+					if rf.Kind() == reflect.Ptr {
+						ptr := reflect.New(rf.Type().Elem())
+						ptr.Elem().Set(cv)
+						rf.Set(ptr)
+					} else {
+						rf.Set(cv)
+					}
+				} else {
+					rf.Set(reflect.Zero(rf.Type()))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *TableClient[T]) hydrateCountIncludes(ctx context.Context, modelName string, parentVals []reflect.Value, spec *an5IncludeSpec) error {
+	countEntries := c.resolveCountEntries(modelName, spec)
+	if len(countEntries) == 0 {
+		return nil
+	}
+	for _, pv := range parentVals {
+		cf := findCountField(pv)
+		if cf.IsValid() && cf.CanSet() && cf.IsNil() {
+			cf.Set(reflect.ValueOf(make(map[string]int)))
+		}
+	}
+	for _, ce := range countEntries {
+		for _, pv := range parentVals {
+			cf := findCountField(pv)
+			if cf.IsValid() && !cf.IsNil() {
+				cf.Interface().(map[string]int)[ce.canonicalKey] = 0
+			}
+		}
+		childKey, parentKey := resolveRelationKeys(modelName, ce.rel)
+		var uniqueVals []interface{}
+		uniqueSeen := make(map[string]bool)
+		for _, pv := range parentVals {
+			rawVal, mapKey, ok := extractJoinKeyValue(pv, parentKey)
+			if ok && !uniqueSeen[mapKey] {
+				uniqueSeen[mapKey] = true
+				uniqueVals = append(uniqueVals, rawVal)
+			}
+		}
+		if len(uniqueVals) == 0 {
+			continue
+		}
+		var qArgs []interface{}
+		phs := make([]string, len(uniqueVals))
+		for i, v := range uniqueVals {
+			qArgs = append(qArgs, v)
+			phs[i] = c.ph(len(qArgs))
+		}
+		quotedChildCol := c.quoteName(childKey)
+		whereSQL := quotedChildCol + " IN (" + strings.Join(phs, ", ") + ")"
+		if ce.where != nil {
+			subClause, subArgs, err := c.buildWhereValueWithContext(ce.where, ce.rel.ModelName, len(qArgs)+1, "", "", "")
+			if err != nil {
+				return err
+			}
+			if subClause != "" {
+				whereSQL += " AND (" + subClause + ")"
+				qArgs = append(qArgs, subArgs...)
+			}
+		}
+		childTable := c.quoteTableName(resolveModelTable(ce.rel.ModelName))
+		countQuery := fmt.Sprintf("SELECT %s, COUNT(*) FROM %s WHERE %s GROUP BY %s", quotedChildCol, childTable, whereSQL, quotedChildCol)
+		rows, err := c.DB.QueryContext(ctx, countQuery, qArgs...)
+		if err != nil {
+			return err
+		}
+		countsByKey := make(map[string]int)
+		for rows.Next() {
+			var rawKey interface{}
+			var cnt int
+			if err := rows.Scan(&rawKey, &cnt); err != nil {
+				rows.Close()
+				return err
+			}
+			_, mk, ok := normalizeJoinKey(rawKey)
+			if ok {
+				countsByKey[mk] = cnt
+			}
+		}
+		scanErr := rows.Err()
+		rows.Close()
+		if scanErr != nil {
+			return scanErr
+		}
+		for _, pv := range parentVals {
+			cf := findCountField(pv)
+			if !cf.IsValid() || cf.IsNil() {
+				continue
+			}
+			_, parentMapKey, ok := extractJoinKeyValue(pv, parentKey)
+			if ok {
+				if n, exists := countsByKey[parentMapKey]; exists {
+					cf.Interface().(map[string]int)[ce.canonicalKey] = n
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TableClient[T]) buildWhereValueWithContext(whereVal interface{}, modelName string, argOffset int, prefix string, selfRef string, colPrefix string) (string, []interface{}, error) {
+	if whereVal == nil {
+		return "", nil, nil
+	}
+	rv, present := isPtrTargetPresent(whereVal)
+	if !present {
+		return "", nil, nil
+	}
+	if rv.Kind() == reflect.Struct {
+		typeName := rv.Type().Name()
+		if strings.HasSuffix(typeName, "WhereInput") && !strings.EqualFold(typeName, modelName+"WhereInput") {
+			return "", nil, fmt.Errorf("where clause struct '%s' does not match model '%s'", typeName, modelName)
+		}
+		return c.buildWhereFromStructWithContext(rv, modelName, argOffset, prefix, selfRef, colPrefix)
+	}
+	if rv.Kind() == reflect.Map {
+		m, ok := rv.Interface().(map[string]interface{})
+		if !ok {
+			return "", nil, fmt.Errorf("where map for '%s' must be map[string]interface{}, got %T", modelName, whereVal)
+		}
+		return c.buildWhereFromMapWithContext(m, modelName, argOffset, prefix, selfRef, colPrefix)
+	}
+	return "", nil, fmt.Errorf("where clause for '%s' must be a struct or map, got %T", modelName, whereVal)
+}
+
+func (c *TableClient[T]) buildWhereFromMapWithContext(m map[string]interface{}, modelName string, argOffset int, prefix string, selfRef string, colPrefix string) (string, []interface{}, error) {
+	if len(m) == 0 {
+		return "", nil, nil
+	}
+	var parts []string
+	var args []interface{}
+	pHFunc := func(n int) string {
+		return c.ph(argOffset + n - 1)
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	combineItems := func(raw interface{}, op string) (string, []interface{}, error) {
+		rv, present := isPtrTargetPresent(raw)
+		if !present {
+			return "", nil, nil
+		}
+		var items []interface{}
+		if rv.Kind() == reflect.Slice {
+			for i := 0; i < rv.Len(); i++ {
+				items = append(items, rv.Index(i).Interface())
+			}
+		} else {
+			items = []interface{}{raw}
+		}
+		var subParts []string
+		var subAllArgs []interface{}
+		for idx, item := range items {
+			clause, subArgs, err := c.buildWhereValueWithContext(item, modelName, argOffset+len(args)+len(subAllArgs), fmt.Sprintf("%s%s%d_", prefix, op, idx), selfRef, colPrefix)
+			if err != nil {
+				return "", nil, err
+			}
+			if clause != "" {
+				subParts = append(subParts, "("+clause+")")
+				subAllArgs = append(subAllArgs, subArgs...)
+			}
+		}
+		if len(subParts) == 0 {
+			return "", nil, nil
+		}
+		joiner := " AND "
+		if op == "OR" {
+			joiner = " OR "
+		}
+		return "(" + strings.Join(subParts, joiner) + ")", subAllArgs, nil
+	}
+	for _, k := range keys {
+		v := m[k]
+		if k == "AND" || k == "OR" {
+			subClause, subArgs, err := combineItems(v, k)
+			if err != nil {
+				return "", nil, err
+			}
+			if subClause != "" {
+				parts = append(parts, subClause)
+				args = append(args, subArgs...)
+			}
+			continue
+		}
+		if k == "NOT" {
+			subClause, subArgs, err := combineItems(v, "NOT")
+			if err != nil {
+				return "", nil, err
+			}
+			if subClause == "" {
+				subClause = "(1=1)"
+			}
+			parts = append(parts, "NOT "+subClause)
+			args = append(args, subArgs...)
+			continue
+		}
+		if rel, exists := resolveModelRelation(modelName, k); exists {
+			relMap, ok := v.(map[string]interface{})
+			if !ok {
+				if v == nil && rel.RelationType == "one" {
+					childTable := c.quoteTableName(resolveModelTable(rel.ModelName))
+					childKey, parentKey := resolveRelationKeys(modelName, rel)
+					parentRef := c.quoteTableName(resolveModelTable(modelName)) + "."
+					if selfRef != "" {
+						parentRef = selfRef + "."
+					}
+					childAlias := "r_" + sanitizeRelationAlias(prefix+goToSnakeCase(k)+"_nil")
+					correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, c.quoteName(childKey), parentRef, c.quoteName(parentKey))
+					parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s)", childTable, childAlias, correlation))
+					continue
+				}
+				return "", nil, fmt.Errorf("relation filter '%s' on '%s' must be a map", k, modelName)
+			}
+			childTable := c.quoteTableName(resolveModelTable(rel.ModelName))
+			childKey, parentKey := resolveRelationKeys(modelName, rel)
+			childCol := c.quoteName(childKey)
+			parentCol := c.quoteName(parentKey)
+			parentRef := c.quoteTableName(resolveModelTable(modelName)) + "."
+			if selfRef != "" {
+				parentRef = selfRef + "."
+			}
+			relSnake := goToSnakeCase(k)
+			relKeys := make([]string, 0, len(relMap))
+			for rk := range relMap {
+				relKeys = append(relKeys, rk)
+			}
+			sort.Strings(relKeys)
+			for _, op := range relKeys {
+				opVal := relMap[op]
+				switch op {
+				case "some", "none", "every":
+					if rel.RelationType != "many" {
+						return "", nil, fmt.Errorf("relation '%s' on '%s' is to-one and cannot use '%s'", k, modelName, op)
+					}
+					childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_"+op)
+					correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+					inner, subArgs, err := c.buildWhereValueWithContext(opVal, rel.ModelName, argOffset+len(args), prefix+relSnake+"_"+op+"_", childAlias, childAlias+".")
+					if err != nil {
+						return "", nil, err
+					}
+					args = append(args, subArgs...)
+					switch op {
+					case "some":
+						innerClause := ""
+						if inner != "" { innerClause = " AND (" + inner + ")" }
+						parts = append(parts, fmt.Sprintf("EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+					case "none":
+						innerClause := ""
+						if inner != "" { innerClause = " AND (" + inner + ")" }
+						parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+					case "every":
+						violatedWhere := " AND 1=0"
+						if inner != "" { violatedWhere = " AND NOT (" + inner + ")" }
+						parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, violatedWhere))
+					}
+				case "is", "isNot":
+					if rel.RelationType != "one" {
+						return "", nil, fmt.Errorf("relation '%s' on '%s' is to-many and cannot use '%s'", k, modelName, op)
+					}
+					childAlias := "r_" + sanitizeRelationAlias(prefix+relSnake+"_"+op)
+					correlation := fmt.Sprintf("%s.%s = %s%s", childAlias, childCol, parentRef, parentCol)
+					if opVal == nil {
+						if op == "is" {
+							parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s)", childTable, childAlias, correlation))
+						} else {
+							parts = append(parts, fmt.Sprintf("EXISTS (SELECT 1 FROM %s AS %s WHERE %s)", childTable, childAlias, correlation))
+						}
+						continue
+					}
+					inner, subArgs, err := c.buildWhereValueWithContext(opVal, rel.ModelName, argOffset+len(args), prefix+relSnake+"_"+op+"_", childAlias, childAlias+".")
+					if err != nil {
+						return "", nil, err
+					}
+					args = append(args, subArgs...)
+					innerClause := ""
+					if inner != "" { innerClause = " AND (" + inner + ")" }
+					if op == "is" {
+						parts = append(parts, fmt.Sprintf("EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+					} else {
+						parts = append(parts, fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s AS %s WHERE %s%s)", childTable, childAlias, correlation, innerClause))
+					}
+				default:
+					return "", nil, fmt.Errorf("unsupported relation operator '%s' on '%s.%s'", op, modelName, k)
+				}
+			}
+			continue
+		}
+		if len(ModelFields) > 0 && !modelHasFieldMeta(modelName, k) {
+			return "", nil, fmt.Errorf("unknown field '%s' in where clause for model '%s'", k, modelName)
+		}
+		col := colPrefix + c.quoteName(goToSnakeCase(k))
+		clause, newArgs, err := c.buildMapFilterExpr(col, k, v, args, pHFunc)
+		if err != nil {
+			return "", nil, err
+		}
+		if clause != "" {
+			parts = append(parts, clause)
+		}
+		args = newArgs
+	}
+	return strings.Join(parts, " AND "), args, nil
 }
 
 func isPtrTargetPresent(target interface{}) (reflect.Value, bool) {
@@ -2397,7 +3783,8 @@ func decodeVectorBytes(raw []byte) ([]float64, bool) {
 	return out, true
 }
 
-// findFieldByDbTag looks up a struct field by its "db" tag (case-insensitive).
+// findFieldByDbTag looks up a struct scalar field by its "db" tag (case-insensitive),
+// falling back to non-relation field names when no "db" tag is present.
 func findFieldByDbTag(val reflect.Value, dbTag string) reflect.Value {
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -2408,7 +3795,70 @@ func findFieldByDbTag(val reflect.Value, dbTag string) reflect.Value {
 	typ := val.Type()
 	for i := 0; i < typ.NumField(); i++ {
 		tag := typ.Field(i).Tag.Get("db")
-		if strings.EqualFold(tag, dbTag) || strings.EqualFold(typ.Field(i).Name, dbTag) {
+		if tag != "" && tag != "-" && strings.EqualFold(tag, dbTag) {
+			return val.Field(i)
+		}
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		sf := typ.Field(i)
+		tag := sf.Tag.Get("db")
+		if tag != "" {
+			continue
+		}
+		jsonName := strings.Split(sf.Tag.Get("json"), ",")[0]
+		if jsonName == "_count" {
+			continue
+		}
+		ft := sf.Type
+		if (ft.Kind() == reflect.Ptr && ft.Elem().Kind() == reflect.Struct && ft.Elem().Name() != "Time") ||
+			(ft.Kind() == reflect.Slice && ft.Elem().Kind() == reflect.Struct) {
+			continue
+		}
+		if strings.EqualFold(sf.Name, dbTag) {
+			return val.Field(i)
+		}
+	}
+	return reflect.Value{}
+}
+
+func findCountField(val reflect.Value) reflect.Value {
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return reflect.Value{}
+	}
+	typ := val.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		sf := typ.Field(i)
+		jsonName := strings.Split(sf.Tag.Get("json"), ",")[0]
+		if jsonName == "_count" {
+			return val.Field(i)
+		}
+	}
+	return reflect.Value{}
+}
+
+func findRelationField(val reflect.Value, relKey string) reflect.Value {
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return reflect.Value{}
+	}
+	typ := val.Type()
+	targetSnake := goToSnakeCase(relKey)
+	for i := 0; i < typ.NumField(); i++ {
+		sf := typ.Field(i)
+		if sf.Tag.Get("db") != "" {
+			continue
+		}
+		jsonName := strings.Split(sf.Tag.Get("json"), ",")[0]
+		if jsonName == "_count" {
+			continue
+		}
+		if strings.EqualFold(sf.Name, relKey) || goToSnakeCase(sf.Name) == targetSnake ||
+			(jsonName != "" && (strings.EqualFold(jsonName, relKey) || goToSnakeCase(jsonName) == targetSnake)) {
 			return val.Field(i)
 		}
 	}
