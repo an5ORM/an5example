@@ -26,6 +26,9 @@ public class User {
   private double[] embedding;
   private LocalDateTime createdAt;
 
+  /** Relation counts populated when the query asks for {@code _count}, or {@code null}. */
+  private Map<String, Integer> count;
+
   public String getId() {
     return this.id;
   }
@@ -132,6 +135,15 @@ public class User {
     this.orders = value;
   }
 
+  /** Relation counts populated when the query asks for {@code _count}, or {@code null}. */
+  public Map<String, Integer> getCount() {
+    return this.count;
+  }
+
+  public void setCount(Map<String, Integer> value) {
+    this.count = value;
+  }
+
   /**
    * Reads `User` from a database row.
    *
@@ -162,6 +174,15 @@ public class User {
         }
       }
       value.orders = related;
+    }
+    if (row.get("_count") instanceof Map) {
+      Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
+      for (Map.Entry<?, ?> entry : ((Map<?, ?>) row.get("_count")).entrySet()) {
+        if (entry.getKey() instanceof String && entry.getValue() instanceof Number) {
+          counts.put((String) entry.getKey(), Integer.valueOf(((Number) entry.getValue()).intValue()));
+        }
+      }
+      value.count = counts;
     }
     return value;
   }

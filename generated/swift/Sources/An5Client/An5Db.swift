@@ -29,11 +29,19 @@ public struct ModelClient<T> {
 
     public func findMany(filter: Where) throws -> [T] { try table.findMany(filter: filter).map { read($0) } }
 
+    public func findMany(filter: Where, _ query: Query) throws -> [T] { try table.findMany(filter: filter, query).map { read($0) } }
+
     public func findFirst(_ query: Query = Query()) throws -> T? { try table.findFirst(query).map { read($0) } }
 
     public func findFirst(filter: Where) throws -> T? { try table.findFirst(filter: filter).map { read($0) } }
 
+    public func findFirst(filter: Where, _ query: Query) throws -> T? { try table.findFirst(filter: filter, query).map { read($0) } }
+
+    public func findUnique(_ query: Query) throws -> T? { try table.findUnique(query).map { read($0) } }
+
     public func findUnique(filter: Where) throws -> T? { try table.findUnique(filter: filter).map { read($0) } }
+
+    public func findUnique(filter: Where, _ query: Query) throws -> T? { try table.findUnique(filter: filter, query).map { read($0) } }
 
     public func count(_ filter: Where? = nil) throws -> Int { try table.count(filter) }
 
@@ -54,6 +62,10 @@ public struct ModelClient<T> {
     /// Updates the matching rows and returns the first of them re-read.
     @discardableResult
     public func update(filter: Where, data: T) throws -> T? { try table.update(filter: filter, data: write(data)).map { read($0) } }
+
+    /// Updates the matching rows and returns the first of them re-read with `query` options.
+    @discardableResult
+    public func update(filter: Where, data: T, query: Query) throws -> T? { try table.update(filter: filter, data: write(data), query: query).map { read($0) } }
 
     /// Updates every matching row and gives back how many changed.
     @discardableResult
@@ -118,9 +130,19 @@ public struct ViewModelClient<T> {
 
     public func findMany(filter: Where) throws -> [T] { try client.findMany(filter: filter).map { read($0) } }
 
+    public func findMany(filter: Where, _ query: Query) throws -> [T] { try client.findMany(filter: filter, query).map { read($0) } }
+
+    public func findFirst(_ query: Query = Query()) throws -> T? { try client.findFirst(query).map { read($0) } }
+
     public func findFirst(filter: Where) throws -> T? { try client.findFirst(filter: filter).map { read($0) } }
 
+    public func findFirst(filter: Where, _ query: Query) throws -> T? { try client.findFirst(filter: filter, query).map { read($0) } }
+
+    public func findUnique(_ query: Query) throws -> T? { try client.findUnique(query).map { read($0) } }
+
     public func findUnique(filter: Where) throws -> T? { try client.findUnique(filter: filter).map { read($0) } }
+
+    public func findUnique(filter: Where, _ query: Query) throws -> T? { try client.findUnique(filter: filter, query).map { read($0) } }
 
     public func count(_ filter: Where? = nil) throws -> Int { try client.count(filter) }
 

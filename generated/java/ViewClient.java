@@ -44,6 +44,10 @@ public final class ViewClient<T> {
     return one(view.findFirst(where));
   }
 
+  public T findUnique(An5Query query) throws SQLException {
+    return one(view.findUnique(query));
+  }
+
   public T findUnique(Map<String, Object> where) throws SQLException {
     return one(view.findUnique(where));
   }

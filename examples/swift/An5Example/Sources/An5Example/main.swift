@@ -182,6 +182,19 @@ func runExample() throws {
     print("alice's orders, included: \(loaded.orders.count)")
     try check(loaded.orders.count == 2, "include returned \(loaded.orders.count) orders, expected 2")
     try check(loaded.orders.first?.total != nil, "the included rows were not mapped onto the model")
+    try check(loaded.count == nil, "count should stay nil when _count was not requested")
+
+    let uniqueAlice = try db.user.findUnique(
+        Query(
+            filter: ["id": aliceId],
+            include: [
+                "orders": true,
+                "_count": ["select": ["orders": ["where": ["status": "paid"]]]]
+            ]
+        )
+    )
+    try check(uniqueAlice?.orders.count == 2, "findUnique with Query did not hydrate alice's orders")
+    try check(uniqueAlice?.count == ["orders": 1], "expected filtered _count.orders == 1 on hydrated User, got \(String(describing: uniqueAlice?.count))")
 
     // ── Read: relation filters via generated ListRelationFilter & RelationFilter
     var paidOrderWhere = An5Orm.OrderWhere()

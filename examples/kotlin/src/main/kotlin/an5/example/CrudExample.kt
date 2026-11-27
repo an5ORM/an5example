@@ -150,6 +150,28 @@ fun main() {
             check(aliceOrders.first().user?.email == "alice@example.com") {
                 "to-one include did not populate user"
             }
+            check(aliceOrders.first().count == null) {
+                "count should stay null when _count was not requested"
+            }
+
+            val uniqueAlice = db.user.findUnique(mapOf("id" to aliceId)) {
+                include(
+                    mapOf(
+                        "orders" to true,
+                        "_count" to mapOf(
+                            "select" to mapOf(
+                                "orders" to mapOf("where" to mapOf("status" to "paid"))
+                            )
+                        ),
+                    )
+                )
+            }
+            check(uniqueAlice != null && uniqueAlice.orders.size == 2) {
+                "findUnique with query block did not hydrate alice's orders"
+            }
+            check(uniqueAlice.count == mapOf("orders" to 1)) {
+                "expected filtered _count.orders == 1 on hydrated User, got ${uniqueAlice.count}"
+            }
 
             val rejectedBogus = try {
                 db.user.findMany(mapOf("email" to mapOf("bogus" to "alice@example.com")))

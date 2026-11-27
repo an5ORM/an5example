@@ -9,6 +9,7 @@ import an5.adapters.Row
 import an5.adapters.stringOrNull
 import an5.adapters.intOrNull
 import an5.adapters.localDateTimeOrNull
+import an5.adapters.relationCounts
 import an5.adapters.relatedOne
 
 /**
@@ -23,7 +24,8 @@ data class Order(
     val userId: String? = null,
     val total: Int? = null,
     val status: String? = null,
-    val createdAt: LocalDateTime? = null
+    val createdAt: LocalDateTime? = null,
+    val count: Map<String, Int>? = null
 ) {
 
     /**
@@ -54,6 +56,7 @@ data class Order(
             status = row.stringOrNull("status"),
             createdAt = row.localDateTimeOrNull("createdAt"),
             user = row.relatedOne("user")?.let { User.fromRow(it) },
+            count = row.relationCounts(),
         )
     }
 }

@@ -169,6 +169,33 @@ public final class CrudExample {
         check(
             loaded.getOrders().get(0).getTotal() != null,
             "the included rows were not mapped onto the model");
+        check(
+            loaded.getCount() == null,
+            "count should stay null when _count was not requested");
+
+        Map<String, Object> countSelect = new LinkedHashMap<String, Object>();
+        countSelect.put(
+            "orders",
+            filter("where", filter("status", op("equals", "paid"))));
+        Map<String, Object> uniqueInclude = new LinkedHashMap<String, Object>();
+        uniqueInclude.put("orders", Boolean.TRUE);
+        uniqueInclude.put("_count", filter("select", countSelect));
+        User uniqueAlice =
+            db.getUser()
+                .findUnique(
+                    new An5Query()
+                        .where(filter("id", op("equals", alice.getId())))
+                        .include(uniqueInclude));
+        check(
+            uniqueAlice != null
+                && uniqueAlice.getOrders() != null
+                && uniqueAlice.getOrders().size() == 2,
+            "findUnique with An5Query did not hydrate alice's orders");
+        check(
+            uniqueAlice.getCount() != null
+                && Integer.valueOf(1).equals(uniqueAlice.getCount().get("orders")),
+            "expected filtered _count.orders == 1 on hydrated User, got "
+                + (uniqueAlice == null ? null : uniqueAlice.getCount()));
 
         // ── Read: typed relation filters & to-one include ──────────────────────
         OrderWhere paidOrderWhere = new OrderWhere();

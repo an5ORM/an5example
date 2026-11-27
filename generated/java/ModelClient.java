@@ -55,6 +55,10 @@ public final class ModelClient<T> {
     return one(table.findFirst(where));
   }
 
+  public T findUnique(An5Query query) throws SQLException {
+    return one(table.findUnique(query));
+  }
+
   public T findUnique(Map<String, Object> where) throws SQLException {
     return one(table.findUnique(where));
   }

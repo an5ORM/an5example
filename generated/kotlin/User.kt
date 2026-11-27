@@ -11,6 +11,7 @@ import an5.adapters.boolOrNull
 import an5.adapters.intOrNull
 import an5.adapters.vectorOrNull
 import an5.adapters.localDateTimeOrNull
+import an5.adapters.relationCounts
 import an5.adapters.related
 
 /**
@@ -27,7 +28,8 @@ data class User(
     val isActive: Boolean? = null,
     val score: Int? = null,
     val embedding: DoubleArray? = null,
-    val createdAt: LocalDateTime? = null
+    val createdAt: LocalDateTime? = null,
+    val count: Map<String, Int>? = null
 ) {
 
     /**
@@ -62,6 +64,7 @@ data class User(
             embedding = row.vectorOrNull("embedding"),
             createdAt = row.localDateTimeOrNull("createdAt"),
             orders = row.related("orders").map { Order.fromRow(it) },
+            count = row.relationCounts(),
         )
     }
 }

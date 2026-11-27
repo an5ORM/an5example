@@ -23,6 +23,9 @@ public class Order {
   private String status;
   private LocalDateTime createdAt;
 
+  /** Relation counts populated when the query asks for {@code _count}, or {@code null}. */
+  private Map<String, Integer> count;
+
   public String getId() {
     return this.id;
   }
@@ -101,6 +104,15 @@ public class Order {
     this.user = value;
   }
 
+  /** Relation counts populated when the query asks for {@code _count}, or {@code null}. */
+  public Map<String, Integer> getCount() {
+    return this.count;
+  }
+
+  public void setCount(Map<String, Integer> value) {
+    this.count = value;
+  }
+
   /**
    * Reads `Order` from a database row.
    *
@@ -123,6 +135,15 @@ public class Order {
       @SuppressWarnings("unchecked")
       Map<String, Object> relationRow = (Map<String, Object>) row.get("user");
       value.user = User.fromRow(relationRow);
+    }
+    if (row.get("_count") instanceof Map) {
+      Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
+      for (Map.Entry<?, ?> entry : ((Map<?, ?>) row.get("_count")).entrySet()) {
+        if (entry.getKey() instanceof String && entry.getValue() instanceof Number) {
+          counts.put((String) entry.getKey(), Integer.valueOf(((Number) entry.getValue()).intValue()));
+        }
+      }
+      value.count = counts;
     }
     return value;
   }

@@ -22,6 +22,9 @@ public struct User {
     /// Eager-loaded with `include: ["orders": true]`.
     public var orders: [Order] = []
 
+    /// Relation counts populated when the query asks for `_count`, or `nil`.
+    public var count: [String: Int]? = nil
+
     public init(
         id: String? = nil,
         email: String? = nil,
@@ -58,7 +61,7 @@ public struct User {
         self.embedding = row.vector("embedding")
         self.createdAt = row.date("createdAt")
         self.orders = row.related("orders").map { Order(row: $0) }
-
+        self.count = row.relationCounts
     }
 
     /// The columns to write, in declaration order, with `nil` left out.

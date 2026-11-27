@@ -18,6 +18,9 @@ public struct Order {
     /// Eager-loaded with `include: ["user": true]`.
     public var user: User? = nil
 
+    /// Relation counts populated when the query asks for `_count`, or `nil`.
+    public var count: [String: Int]? = nil
+
     public init(
         id: String? = nil,
         userId: String? = nil,
@@ -48,7 +51,7 @@ public struct Order {
         self.status = row.string("status")
         self.createdAt = row.date("createdAt")
         self.user = row.relatedOne("user").map { User(row: $0) }
-
+        self.count = row.relationCounts
     }
 
     /// The columns to write, in declaration order, with `nil` left out.
